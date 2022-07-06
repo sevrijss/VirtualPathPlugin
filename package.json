@@ -14,7 +14,7 @@
   },
   "description": "Extension for Community Solid Server to use virtual paths and derived data",
   "dependencies": {
-    "@solid/community-server": "^3.0.0",
+    "@solid/community-server": "^4.0.1",
     "node-fetch": "^2.6.1"
   },
   "main": "./dist/index.js",
