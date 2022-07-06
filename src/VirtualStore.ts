@@ -48,19 +48,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             this.logger.info(`[PROCESSING\t${virtualIdentifier}]\tVIRTUAL PATH`);
             // @ts-expect-error The object returns an any type,
             // which the compiler can't work with because we need to return a Promise<Representation>
-            return this.virtualIdentifiers[virtualIdentifier](preferences, conditions).then((r: Representation) => {
-                console.log("returned representation:");
-                console.log(r);
-                console.log("END");
-                return r;
-            });
-        }
-        if (parsed && virtualIdentifier === ".acl") {
-            this.source.getRepresentation(identifier, preferences, conditions).then(r => {
-                console.log("ACL META:");
-                console.log(r.metadata);
-                console.log("ACL META END");
-            })
+            return this.virtualIdentifiers[virtualIdentifier](preferences, conditions)
         }
         return this.source.getRepresentation(identifier, preferences, conditions)
     }
