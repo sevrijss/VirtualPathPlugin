@@ -22,7 +22,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
 
     public addVirtualRoute(name: string,
                            original: ResourceIdentifier,
-                           deriveFunction: (s:VirtualStore, arg0: ResourceIdentifier, arg1: RepresentationPreferences, arg3: Conditions)
+                           deriveFunction: (s: VirtualStore, arg0: ResourceIdentifier, arg1: RepresentationPreferences, arg3: Conditions)
                                => Promise<Representation>): void {
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
         // @ts-expect-error indexing doesn't work for some reason when using strings
@@ -48,16 +48,14 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             this.logger.info(`[PROCESSING\t${virtualIdentifier}]\tVIRTUAL PATH`);
             // @ts-expect-error The object returns an any type,
             // which the compiler can't work with because we need to return a Promise<Representation>
-            const result = this.virtualIdentifiers[virtualIdentifier](preferences, conditions);
-
-            result.then((r: Representation) => {
+            return this.virtualIdentifiers[virtualIdentifier](preferences, conditions).then((r: Representation) => {
                 console.log("returned representation:");
                 console.log(r);
                 console.log("END");
+                return r;
             });
-            return result;
         }
-        if(parsed && virtualIdentifier === ".acl"){
+        if (parsed && virtualIdentifier === ".acl") {
             this.source.getRepresentation(identifier, preferences, conditions).then(r => {
                 console.log("ACL META:");
                 console.log(r.metadata);

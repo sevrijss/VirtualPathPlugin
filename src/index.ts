@@ -4,6 +4,7 @@ import {
     getLoggerFor,
     Representation,
     RepresentationConverter,
+    RepresentationMetadata,
     RepresentationPreferences,
     ResourceIdentifier
 } from '@solid/community-server';
@@ -23,7 +24,6 @@ export class PathBuilder {
     public constructor(store: VirtualStore, converter: RepresentationConverter) {
         this.store = store;
         this.converter = converter;
-        console.log(this.converter);
         store.addVirtualRoute('age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
         store.addVirtualRoute('name', {path: 'http://localhost:3000/card.ttl'}, this.getName);
     }
@@ -37,6 +37,11 @@ export class PathBuilder {
             }
             console.log(result.metadata);
             const out = new BasicRepresentation();
+            let newMeta = new RepresentationMetadata();
+            let done = false;
+            newMeta.contentType = "internal/quads";
+            out.metadata.setMetadata(newMeta);
+
             result.data.on('data', (chunk: Quad) => {
                 if (chunk.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
                     writer.addQuad(chunk);
@@ -46,9 +51,10 @@ export class PathBuilder {
                 writer.end((error, result: string) => {
                     console.log(result);
                     out.data.push(result);
+                    done = true;
                 });
             })
-            await this.converter.canHandle({representation: out, identifier: cardUrl, preferences: prefs});
+            console.log("RETURNING");
             return await this.converter.handle({representation: out, identifier: cardUrl, preferences: prefs});
         });
     };
