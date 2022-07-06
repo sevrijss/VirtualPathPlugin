@@ -26,7 +26,6 @@
     "files-scs:config/ldp/modes/default.json",
     "files-scs:config/storage/backend/file.json",
     "files-scs:config/storage/key-value/resource-store.json",
-
     "files-scs:config/util/auxiliary/acl.json",
     "files-scs:config/util/identifiers/suffix.json",
     "files-scs:config/util/index/default.json",
@@ -34,12 +33,21 @@
     "files-scs:config/util/representation-conversion/default.json",
     "files-scs:config/util/resource-locker/memory.json",
     "files-scs:config/util/variables/default.json",
-
-    "files-virtualStore:config/storage/middleware/default.json"
+    "files-virtualStore:config/default.json",
+    "files-virtualStore:config/pathbuilder.json"
   ],
   "@graph": [
     {
       "comment": "A single-pod server that stores its resources on disk and supports solid search."
+    },
+    {
+      "@id": "urn:solid-server:default:ParallelInitializer",
+      "@type": "ParallelHandler",
+      "handlers": [
+        {
+          "@id": "urn:virtualStore:default:PathBuilder"
+        }
+      ]
     }
   ]
 }
