@@ -1,79 +1,61 @@
-import {getLoggerFor, ResourceStore, ResourceIdentifier, Initializer, Guarded} from '@solid/community-server';
-import type {EventEmitter} from 'events';
-import fetch from 'node-fetch';
-import {Readable} from 'stream';
+import {
+    BasicRepresentation,
+    Conditions,
+    getLoggerFor,
+    Representation,
+    RepresentationConverter,
+    RepresentationPreferences,
+    ResourceIdentifier
+} from '@solid/community-server';
+import {VirtualStore} from "./VirtualStore";
+import {Quad} from "rdf-js";
+import N3, {NamedNode} from "n3";
 
 export * from "./VirtualStore";
 
-const SUPPORTED_CONTENT_TYPE = "text/turtle";
+const quadPrefs = {type: {'internal/quads': 1}};
 
-/**
- * Sends RDF documents to the Solid-Search (Atomic-Server) endpoint whenever a resource is updated, which allows for full-text search.
- */
-export class SearchListener extends Initializer {
+export class PathBuilder {
     private readonly logger = getLoggerFor(this);
-    private readonly store: ResourceStore;
-    private readonly endpoint: string = "http://0.0.0.0:80/search";
+    private readonly store: VirtualStore;
+    private readonly converter: RepresentationConverter;
 
-    public constructor(source: EventEmitter, store: ResourceStore,
-                       /** Should be an Atomic-Search server URL with `/search` path */
-                       searchEndpoint: string) {
-        super();
+    public constructor(store: VirtualStore, converter: RepresentationConverter) {
         this.store = store;
-
-        if (searchEndpoint) {
-            console.log("i'm here");
-            console.log(searchEndpoint);
-            this.endpoint = searchEndpoint;
-        }
-
-        // Every time a resource is changed, post to the Solid-Search instance
-        source.on('changed', async (changed: ResourceIdentifier): Promise<void> => {
-            this.postChanges(changed);
-        });
-        console.log("exit constructor");
+        this.converter = converter;
+        console.log(this.converter);
+        store.addVirtualRoute('age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
+        store.addVirtualRoute('name', {path: 'http://localhost:3000/card.ttl'}, this.getName);
     }
 
-    /** Sends the new state of the Resource to the Search back-end */
-    async postChanges(changed: ResourceIdentifier): Promise<void> {
-        try {
-            const repr = await this.store.getRepresentation(changed, {type: {SUPPORTED_CONTENT_TYPE: 1}});
+    private getAge = async (store: VirtualStore, cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+        const writer = new N3.Writer();
 
-            if (repr.metadata.contentType !== SUPPORTED_CONTENT_TYPE) {
-                return;
+        return store.getRepresentation(cardUrl, quadPrefs, cond).then(async (result: Representation): Promise<Representation> => {
+            if (result.isEmpty) {
+                return result;
             }
-
-            const turtleStream = repr.data;
-            const reqBody = await streamToString(turtleStream);
-
-            const response = await fetch(this.endpoint, {
-                method: "POST",
-                body: reqBody,
-                headers: {
-                    "Content-Type": SUPPORTED_CONTENT_TYPE
+            console.log(result.metadata);
+            const out = new BasicRepresentation();
+            result.data.on('data', (chunk: Quad) => {
+                if (chunk.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
+                    writer.addQuad(chunk);
                 }
-            });
+            }).on('close', () => {
+                console.log("STREAM CLOSED");
+                writer.end((error, result: string) => {
+                    console.log(result);
+                    out.data.push(result);
+                });
+            })
+            await this.converter.canHandle({representation: out, identifier: cardUrl, preferences: prefs});
+            return await this.converter.handle({representation: out, identifier: cardUrl, preferences: prefs});
+        });
+    };
 
-            if (response.status !== 200) {
-                throw new Error(`Solid-Search Server did not accept updated resource. Status:` + response.status + "\n" + await response.text());
-            }
-        } catch (e) {
-            this.logger.error(`Failed to post resource to search endpoint: ${e}`);
-        }
+    private getName = (store: VirtualStore, cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions) => {
+        console.log(cardUrl);
+        return store.getRepresentation(cardUrl, prefs, cond);
+    };
 
-    }
-
-    public async handle(): Promise<void> {
-        // Nothing needed here, but method required implementation
-        console.log("in handle");
-    }
-}
-
-async function streamToString(stream: Guarded<Readable>): Promise<string> {
-    const chunks: Buffer[] = [];
-    return new Promise((resolve, reject) => {
-        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-        stream.on('error', (err) => reject(err));
-        stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    })
 }

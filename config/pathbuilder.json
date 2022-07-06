@@ -1,0 +1,19 @@
+{
+  "@context": [
+    "https://linkedsoftwaredependencies.org/bundles/npm/@solid/community-server/^4.0.0/components/context.jsonld",
+    "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server/^0.0.0/components/context.jsonld"
+  ],
+  "@graph": [
+    {
+      "comment": "Path builder for derived documents.",
+      "@id": "urn:virtualStore:default:PathBuilder",
+      "@type": "PathBuilder",
+      "store": {
+        "@id": "urn:virtualStore:default:ResourceStore_Virtual"
+      },
+      "converter": {
+        "@id": "urn:solid-server:default:RepresentationConverter"
+      }
+    }
+  ]
+}
