@@ -21,7 +21,7 @@
       "@id": "urn:solid-server:default:ResourceStore",
       "@type": "MonitoringStore",
       "MonitoringStore:_source": {
-        "@id": "urn:virtualStore:default:ResourceStore_Virtual"
+        "@id": "urn:solid-server:default:ResourceStore_Index"
       }
     },
     {
@@ -41,19 +41,19 @@
     {
       "@id": "urn:solid-server:default:ResourceStore_Patching",
       "PatchingStore:_source": {
-        "@id": "urn:solid-server:default:ResourceStore_Converting"
+        "@id": "urn:virtualStore:default:ResourceStore_Virtual"
       }
     },
     {
       "@id": "urn:solid-server:default:ResourceStore_Converting",
       "RepresentationConvertingStore:_source": {
-        "@id": "urn:solid-server:default:ResourceStore_Backend"
+        "@id":  "urn:solid-server:default:ResourceStore_Backend"
       }
     },
     {
       "@id": "urn:virtualStore:default:ResourceStore_Virtual",
       "VirtualStore:_source": {
-        "@id": "urn:solid-server:default:ResourceStore_Index"
+        "@id": "urn:solid-server:default:ResourceStore_Converting"
       }
     }
   ]
