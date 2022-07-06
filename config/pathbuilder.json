@@ -8,11 +8,14 @@
       "comment": "Path builder for derived documents.",
       "@id": "urn:virtualStore:default:PathBuilder",
       "@type": "PathBuilder",
-      "store": {
+      "vStore": {
         "@id": "urn:virtualStore:default:ResourceStore_Virtual"
       },
       "converter": {
         "@id": "urn:solid-server:default:RepresentationConverter"
+      },
+      "toplvlStore": {
+        "@id": "urn:solid-server:default:ResourceStore"
       }
     }
   ]

@@ -22,11 +22,11 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
 
     public addVirtualRoute(name: string,
                            original: ResourceIdentifier,
-                           deriveFunction: (s: VirtualStore, arg0: ResourceIdentifier, arg1: RepresentationPreferences, arg3: Conditions)
+                           deriveFunction: (arg0: ResourceIdentifier, arg1: RepresentationPreferences, arg3: Conditions)
                                => Promise<Representation>): void {
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
         // @ts-expect-error indexing doesn't work for some reason when using strings
-        this.virtualIdentifiers[name] = (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => deriveFunction(this, original, prefs, cond);
+        this.virtualIdentifiers[name] = (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => deriveFunction(original, prefs, cond);
     }
 
     // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility

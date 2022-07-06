@@ -2,11 +2,14 @@ import {
     BasicRepresentation,
     Conditions,
     getLoggerFor,
+    INTERNAL_QUADS,
     Representation,
     RepresentationConverter,
     RepresentationMetadata,
     RepresentationPreferences,
-    ResourceIdentifier
+    ResourceIdentifier,
+    ResourceStore,
+    transformSafely
 } from '@solid/community-server';
 import {VirtualStore} from "./VirtualStore";
 import {Quad} from "rdf-js";
@@ -18,50 +21,38 @@ const quadPrefs = {type: {'internal/quads': 1}};
 
 export class PathBuilder {
     private readonly logger = getLoggerFor(this);
-    private readonly store: VirtualStore;
+    private readonly virtualStore: VirtualStore;
     private readonly converter: RepresentationConverter;
+    private readonly toplvlStore: ResourceStore;
 
-    public constructor(store: VirtualStore, converter: RepresentationConverter) {
-        this.store = store;
+    public constructor(vStore: VirtualStore, converter: RepresentationConverter, toplvlStore: ResourceStore) {
+        this.virtualStore = vStore;
         this.converter = converter;
-        store.addVirtualRoute('age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
-        store.addVirtualRoute('name', {path: 'http://localhost:3000/card.ttl'}, this.getName);
+        this.toplvlStore = toplvlStore;
+        this.virtualStore.addVirtualRoute('age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
+        this.virtualStore.addVirtualRoute('name', {path: 'http://localhost:3000/card.ttl'}, this.getName);
     }
 
-    private getAge = async (store: VirtualStore, cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-        const writer = new N3.Writer();
+    private getAge = async (cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+        // You will almost certainly never need `then`
+        const result = await this.toplvlStore.getRepresentation(cardUrl, quadPrefs, cond)
 
-        return store.getRepresentation(cardUrl, quadPrefs, cond).then(async (result: Representation): Promise<Representation> => {
-            if (result.isEmpty) {
-                return result;
-            }
-            console.log(result.metadata);
-            const out = new BasicRepresentation();
-            let newMeta = new RepresentationMetadata();
-            let done = false;
-            newMeta.contentType = "internal/quads";
-            out.metadata.setMetadata(newMeta);
-
-            result.data.on('data', (chunk: Quad) => {
-                if (chunk.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
-                    writer.addQuad(chunk);
+        // Utility function from CSS, will make your life much easier
+        const transformedStream = transformSafely(result.data, {
+            transform(data: Quad): void {
+                if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
+                    this.push(data);
                 }
-            }).on('close', () => {
-                console.log("STREAM CLOSED");
-                writer.end((error, result: string) => {
-                    console.log(result);
-                    out.data.push(result);
-                    done = true;
-                });
-            })
-            console.log("RETURNING");
-            return await this.converter.handle({representation: out, identifier: cardUrl, preferences: prefs});
+            },
+            objectMode: true
         });
+        const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
+        return await this.converter.handle({representation: out, identifier: cardUrl, preferences: prefs});
     };
 
-    private getName = (store: VirtualStore, cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions) => {
+    private getName = (cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions) => {
         console.log(cardUrl);
-        return store.getRepresentation(cardUrl, prefs, cond);
+        return this.toplvlStore.getRepresentation(cardUrl, prefs, cond);
     };
 
 }
