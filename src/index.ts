@@ -13,7 +13,8 @@ import {
 } from '@solid/community-server';
 import {VirtualStore} from "./VirtualStore";
 import {Quad} from "rdf-js";
-import N3, {NamedNode} from "n3";
+import N3, {NamedNode, DataFactory} from "n3";
+const { namedNode, literal, defaultGraph, quad } = DataFactory;
 
 export * from "./VirtualStore";
 
@@ -41,7 +42,12 @@ export class PathBuilder {
         const transformedStream = transformSafely(result.data, {
             transform(data: Quad): void {
                 if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
-                    this.push(data);
+                    this.push(quad(
+                        data.subject,
+                        namedNode("https://dbpedia.org/ontology/age"),
+                        literal(yearsPassed(new Date(data.object.value))),
+                        defaultGraph()
+                    ));
                 }
             },
             objectMode: true
@@ -55,4 +61,11 @@ export class PathBuilder {
         return this.toplvlStore.getRepresentation(cardUrl, prefs, cond);
     };
 
+}
+
+function yearsPassed(date:Date){
+    const now = new Date().getTime()
+    const then = date.getTime();
+    const diff = now - then;
+    return Math.floor(diff / (1000*60*60*24*365))
 }
