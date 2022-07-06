@@ -1,79 +1,71 @@
-import {getLoggerFor, ResourceStore, ResourceIdentifier, Initializer, Guarded} from '@solid/community-server';
-import type {EventEmitter} from 'events';
-import fetch from 'node-fetch';
-import {Readable} from 'stream';
+import {
+    BasicRepresentation,
+    Conditions,
+    getLoggerFor,
+    INTERNAL_QUADS,
+    Representation,
+    RepresentationConverter,
+    RepresentationMetadata,
+    RepresentationPreferences,
+    ResourceIdentifier,
+    ResourceStore,
+    transformSafely
+} from '@solid/community-server';
+import {VirtualStore} from "./VirtualStore";
+import {Quad} from "rdf-js";
+import N3, {NamedNode, DataFactory} from "n3";
+const { namedNode, literal, defaultGraph, quad } = DataFactory;
 
 export * from "./VirtualStore";
 
-const SUPPORTED_CONTENT_TYPE = "text/turtle";
+const quadPrefs = {type: {'internal/quads': 1}};
 
-/**
- * Sends RDF documents to the Solid-Search (Atomic-Server) endpoint whenever a resource is updated, which allows for full-text search.
- */
-export class SearchListener extends Initializer {
+export class PathBuilder {
     private readonly logger = getLoggerFor(this);
-    private readonly store: ResourceStore;
-    private readonly endpoint: string = "http://0.0.0.0:80/search";
+    private readonly virtualStore: VirtualStore;
+    private readonly converter: RepresentationConverter;
+    private readonly toplvlStore: ResourceStore;
 
-    public constructor(source: EventEmitter, store: ResourceStore,
-                       /** Should be an Atomic-Search server URL with `/search` path */
-                       searchEndpoint: string) {
-        super();
-        this.store = store;
-
-        if (searchEndpoint) {
-            console.log("i'm here");
-            console.log(searchEndpoint);
-            this.endpoint = searchEndpoint;
-        }
-
-        // Every time a resource is changed, post to the Solid-Search instance
-        source.on('changed', async (changed: ResourceIdentifier): Promise<void> => {
-            this.postChanges(changed);
-        });
-        console.log("exit constructor");
+    public constructor(vStore: VirtualStore, converter: RepresentationConverter, toplvlStore: ResourceStore) {
+        this.virtualStore = vStore;
+        this.converter = converter;
+        this.toplvlStore = toplvlStore;
+        this.virtualStore.addVirtualRoute('age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
+        this.virtualStore.addVirtualRoute('name', {path: 'http://localhost:3000/card.ttl'}, this.getName);
     }
 
-    /** Sends the new state of the Resource to the Search back-end */
-    async postChanges(changed: ResourceIdentifier): Promise<void> {
-        try {
-            const repr = await this.store.getRepresentation(changed, {type: {SUPPORTED_CONTENT_TYPE: 1}});
+    private getAge = async (cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+        // You will almost certainly never need `then`
+        const result = await this.toplvlStore.getRepresentation(cardUrl, quadPrefs, cond)
 
-            if (repr.metadata.contentType !== SUPPORTED_CONTENT_TYPE) {
-                return;
-            }
-
-            const turtleStream = repr.data;
-            const reqBody = await streamToString(turtleStream);
-
-            const response = await fetch(this.endpoint, {
-                method: "POST",
-                body: reqBody,
-                headers: {
-                    "Content-Type": SUPPORTED_CONTENT_TYPE
+        // Utility function from CSS, will make your life much easier
+        const transformedStream = transformSafely(result.data, {
+            transform(data: Quad): void {
+                if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
+                    this.push(quad(
+                        data.subject,
+                        namedNode("https://dbpedia.org/ontology/age"),
+                        literal(yearsPassed(new Date(data.object.value))),
+                        defaultGraph()
+                    ));
                 }
-            });
+            },
+            objectMode: true
+        });
+        const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
+        return await this.converter.handle({representation: out, identifier: cardUrl, preferences: prefs});
+    };
 
-            if (response.status !== 200) {
-                throw new Error(`Solid-Search Server did not accept updated resource. Status:` + response.status + "\n" + await response.text());
-            }
-        } catch (e) {
-            this.logger.error(`Failed to post resource to search endpoint: ${e}`);
-        }
+    private getName = (cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions) => {
+        console.log(cardUrl);
+        return this.toplvlStore.getRepresentation(cardUrl, prefs, cond);
+    };
 
-    }
-
-    public async handle(): Promise<void> {
-        // Nothing needed here, but method required implementation
-        console.log("in handle");
-    }
 }
 
-async function streamToString(stream: Guarded<Readable>): Promise<string> {
-    const chunks: Buffer[] = [];
-    return new Promise((resolve, reject) => {
-        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-        stream.on('error', (err) => reject(err));
-        stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    })
+function yearsPassed(date:Date){
+    const now = new Date().getTime()
+    const then = date.getTime();
+    const diff = now - then;
+    return Math.floor(diff / (1000*60*60*24*365))
 }

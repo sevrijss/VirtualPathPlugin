@@ -6,15 +6,15 @@
     "ts-node": "^9.1.1",
     "typescript": "^4.2.3"
   },
-  "name": "solid-search-community-server",
+  "name": "solid-virtual-route-community-server",
   "version": "0.0.5",
   "repository": {
     "type": "git",
-    "url": "git@github.com:joepio/solid-search-communit-server.git"
+    "url": "git@github.com:sevrijss/VirtualPathPlugin.git"
   },
-  "description": "Extension for Community Solid Server to use full-text search, powered by Atomic-Server",
+  "description": "Extension for Community Solid Server to use virtual paths and derived data",
   "dependencies": {
-    "@solid/community-server": "^3.0.0",
+    "@solid/community-server": "^4.0.1",
     "node-fetch": "^2.6.1"
   },
   "main": "./dist/index.js",
@@ -26,23 +26,22 @@
     "build:ts": "tsc"
   },
   "keywords": [
-    "solid",
-    "search"
+    "solid"
   ],
   "files": [
     "dist",
     "config"
   ],
-  "lsd:module": "https://linkedsoftwaredependencies.org/bundles/npm/solid-search-community-server",
+  "lsd:module": "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server",
   "lsd:components": "dist/components/components.jsonld",
   "lsd:contexts": {
-    "https://linkedsoftwaredependencies.org/bundles/npm/solid-search-community-server/^0.0.0/components/context.jsonld": "dist/components/context.jsonld"
+    "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server/^0.0.0/components/context.jsonld": "dist/components/context.jsonld"
   },
   "lsd:importPaths": {
-    "https://linkedsoftwaredependencies.org/bundles/npm/solid-search-community-server/^0.0.0/components/": "dist/components/",
-    "https://linkedsoftwaredependencies.org/bundles/npm/solid-search-community-server/^0.0.0/config/": "config/",
-    "https://linkedsoftwaredependencies.org/bundles/npm/solid-search-community-server/^0.0.0/dist/": "dist/"
+    "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server/^0.0.0/components/": "dist/components/",
+    "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server/^0.0.0/config/": "config/",
+    "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server/^0.0.0/dist/": "dist/"
   },
-  "author": "Joep Meindertsma",
+  "author": "Seppe Van Rijsselberghe",
   "license": "MIT"
 }

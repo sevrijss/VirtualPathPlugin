@@ -1,0 +1,13 @@
+{
+  "@context": [
+    "https://linkedsoftwaredependencies.org/bundles/npm/@solid/community-server/^4.0.0/components/context.jsonld",
+    "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server/^0.0.0/components/context.jsonld"
+  ],
+  "@graph": [
+    {
+      "comment": "Supports derived documents.",
+      "@id": "urn:virtualStore:default:ResourceStore_Virtual",
+      "@type": "VirtualStore"
+    }
+  ]
+}
