@@ -7,7 +7,7 @@
     "files-scs:config/storage/middleware/stores/converting.json",
     "files-scs:config/storage/middleware/stores/locking.json",
     "files-scs:config/storage/middleware/stores/patching.json",
-    "config/storage/middleware/stores/virtual.json"
+    "files-virtualStore:config/storage/middleware/stores/virtual.json"
   ],
   "@graph": [
     {
@@ -20,7 +20,7 @@
       "comment": "Sets up a stack of utility stores used by most instances.",
       "@id": "urn:files-scs:default:ResourceStore",
       "@type": "MonitoringStore",
-      "MonitoringStore:_source": { "@id": "urn:virtualStore:default:ResourceStore_Virtual" }
+      "MonitoringStore:_source": { "@id": "urn:files-virtualStore:default:ResourceStore_Virtual" }
     },
     {
       "comment": "When a container with an index.html document is accessed, serve that HTML document instead of the container.",
@@ -41,7 +41,7 @@
       "RepresentationConvertingStore:_source": { "@id": "urn:files-scs:default:ResourceStore_Backend" }
     },
     {
-      "@id": "urn:virtualStore:default:ResourceStore_Virtual",
+      "@id": "urn:files-virtualStore:default:ResourceStore_Virtual",
       "VirtualStore:_source": {"@id":  "urn:files-scs:default:ResourceStore_Index"}
     }
   ]

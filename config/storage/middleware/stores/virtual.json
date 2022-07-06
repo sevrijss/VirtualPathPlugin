@@ -3,7 +3,7 @@
   "@graph": [
     {
       "comment": "Supports derived documents.",
-      "@id": "urn:virtualStore:default:ResourceStore_Virtual",
+      "@id": "urn:files-virtualStore:default:ResourceStore_Virtual",
       "@type": "VirtualStore"
     }
   ]

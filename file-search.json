@@ -35,7 +35,7 @@
     "files-scs:config/util/resource-locker/memory.json",
     "files-scs:config/util/variables/default.json",
 
-    "config/storage/middleware/default.json"
+    "files-virtualStore:config/storage/middleware/default.json"
   ],
   "@graph": [
     {
