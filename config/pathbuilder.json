@@ -11,10 +11,7 @@
       "vStore": {
         "@id": "urn:virtualStore:default:ResourceStore_Virtual"
       },
-      "converter": {
-        "@id": "urn:solid-server:default:RepresentationConverter"
-      },
-      "toplvlStore": {
+      "topStore": {
         "@id": "urn:solid-server:default:ResourceStore"
       }
     }
