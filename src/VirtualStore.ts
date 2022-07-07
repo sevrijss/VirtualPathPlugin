@@ -18,24 +18,16 @@ const quadPrefs = {type: {'internal/quads': 1}};
 
 export class VirtualStore<T extends ResourceStore = ResourceStore> extends PassthroughStore<T> {
     protected readonly source: T;
-    private topLvlStore: ResourceStore;
     private readonly converter: RepresentationConverter;
     private readonly logger = getLoggerFor(this);
 
 
     private virtualIdentifiers = {};
 
-    public setTopStore(topStore: ResourceStore): void {
-        this.topLvlStore = topStore;
-        console.log(this.topLvlStore);
-    }
-
-    public constructor(source: T, topStore: ResourceStore, converter: RepresentationConverter) {
+    public constructor(source: T, converter: RepresentationConverter) {
         super(source);
         this.source = source;
-        console.log(topStore);
         this.converter = converter;
-        this.topLvlStore = topStore;
     }
 
     public addVirtualRoute(name: string,
@@ -46,7 +38,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
                 // You will almost certainly never need `then`
-                const result = await this.topLvlStore.getRepresentation(original, quadPrefs, cond);
+                const result = await this.getRepresentation(original, quadPrefs, cond);
 
 
                 // Utility function from CSS, will make your life much easier

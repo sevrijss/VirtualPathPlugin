@@ -10,9 +10,6 @@
       "@type": "VirtualStore",
       "converter": {
         "@id": "urn:solid-server:default:RepresentationConverter"
-      },
-      "topStore": {
-        "@id": "urn:solid-server:default:ResourceStore"
       }
     }
   ]

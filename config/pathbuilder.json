@@ -11,9 +11,6 @@
       "vStore": {
         "@id": "urn:virtualStore:default:ResourceStore_Virtual"
       },
-      "topStore": {
-        "@id": "urn:solid-server:default:ResourceStore"
-      }
     }
   ]
 }
