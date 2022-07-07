@@ -1,71 +1,71 @@
-import {
-    BasicRepresentation,
-    Conditions,
-    getLoggerFor,
-    INTERNAL_QUADS,
-    Representation,
-    RepresentationConverter,
-    RepresentationMetadata,
-    RepresentationPreferences,
-    ResourceIdentifier,
-    ResourceStore,
-    transformSafely
-} from '@solid/community-server';
 import {VirtualStore} from "./VirtualStore";
 import {Quad} from "rdf-js";
-import N3, {NamedNode, DataFactory} from "n3";
-const { namedNode, literal, defaultGraph, quad } = DataFactory;
+import {DataFactory, NamedNode} from "n3";
+import N3 from 'n3';
+
+const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
 export * from "./VirtualStore";
 
-const quadPrefs = {type: {'internal/quads': 1}};
-
 export class PathBuilder {
-    private readonly logger = getLoggerFor(this);
     private readonly virtualStore: VirtualStore;
-    private readonly converter: RepresentationConverter;
-    private readonly toplvlStore: ResourceStore;
 
-    public constructor(vStore: VirtualStore, converter: RepresentationConverter, toplvlStore: ResourceStore) {
+    public constructor(vStore: VirtualStore) {
         this.virtualStore = vStore;
-        this.converter = converter;
-        this.toplvlStore = toplvlStore;
-        this.virtualStore.addVirtualRoute('age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
-        this.virtualStore.addVirtualRoute('name', {path: 'http://localhost:3000/card.ttl'}, this.getName);
+        this.virtualStore.addVirtualRouteStream('http://localhost:3000/age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
+        this.virtualStore.addVirtualRoute('http://localhost:3000/age2', {path: 'http://localhost:3000/card.ttl'}, this.getAge2);
+        this.virtualStore.addVirtualRouteStream('http://localhost:3000/birthYear', {path: 'http://localhost:3000/age'}, this.getBirthYear);
+        this.virtualStore.addVirtualRouteStream('http://localhost:3000/friends', {path: 'http://localhost:3000/card.ttl'}, this.getFriends);
     }
 
-    private getAge = async (cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-        // You will almost certainly never need `then`
-        const result = await this.toplvlStore.getRepresentation(cardUrl, quadPrefs, cond)
-
-        // Utility function from CSS, will make your life much easier
-        const transformedStream = transformSafely(result.data, {
-            transform(data: Quad): void {
-                if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
-                    this.push(quad(
-                        data.subject,
-                        namedNode("https://dbpedia.org/ontology/age"),
-                        literal(yearsPassed(new Date(data.object.value))),
-                        defaultGraph()
-                    ));
-                }
-            },
-            objectMode: true
-        });
-        const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
-        return await this.converter.handle({representation: out, identifier: cardUrl, preferences: prefs});
+    private getAge = (data: Quad): Quad | undefined => {
+        if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
+            return quad(
+                data.subject,
+                namedNode("http://dbpedia.org/ontology/age"),
+                literal(yearsPassed(new Date(data.object.value))),
+                defaultGraph()
+            );
+        }
     };
 
-    private getName = (cardUrl: ResourceIdentifier, prefs: RepresentationPreferences, cond: Conditions) => {
-        console.log(cardUrl);
-        return this.toplvlStore.getRepresentation(cardUrl, prefs, cond);
-    };
+    private getAge2 = (store: N3.Store): Quad[] => {
+        let out:Quad[] = []
+        for( const temp of store.match(null, namedNode('http://example.com/ontology/bornOn'), null)){
+            console.log(temp);
+        }
+        for (const data of store.match(null, namedNode('http://dbpedia.org/ontology/birthDate'), null)){
+            out.push(quad(
+                data.subject,
+                namedNode("http://dbpedia.org/ontology/age"),
+                literal(yearsPassed(new Date(data.object.value))),
+                defaultGraph()
+            ));
+        }
+        return out
+    }
 
+    private getBirthYear = (data: Quad): Quad | undefined => {
+        if (data.predicate.equals(new NamedNode("http://dbpedia.org/ontology/age"))) {
+            return quad(
+                data.subject,
+                namedNode("http://dbpedia.org/ontology/birthYear"),
+                literal(new Date().getFullYear() - parseInt(data.object.value)),
+                defaultGraph()
+            )
+        }
+    }
+
+    private getFriends = (data: Quad): Quad | undefined => {
+        if (data.predicate.equals(new NamedNode("http://xmlns.com/foaf/0.1/knows"))) {
+            return data;
+        }
+    }
 }
 
-function yearsPassed(date:Date){
+function yearsPassed(date: Date) {
     const now = new Date().getTime()
     const then = date.getTime();
     const diff = now - then;
-    return Math.floor(diff / (1000*60*60*24*365))
+    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365))
 }
