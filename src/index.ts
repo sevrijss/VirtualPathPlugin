@@ -12,29 +12,16 @@ export class PathBuilder {
 
     public constructor(vStore: VirtualStore) {
         this.virtualStore = vStore;
-        this.virtualStore.addVirtualRouteStream('http://localhost:3000/age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
-        this.virtualStore.addVirtualRoute('http://localhost:3000/age2', {path: 'http://localhost:3000/card.ttl'}, this.getAge2);
-        this.virtualStore.addVirtualRouteStream('http://localhost:3000/birthYear', {path: 'http://localhost:3000/age'}, this.getBirthYear);
-        this.virtualStore.addVirtualRouteStream('http://localhost:3000/friends', {path: 'http://localhost:3000/card.ttl'}, this.getFriends);
+        this.virtualStore.addVirtualRouteStream('http://localhost:3000/age', ['http://localhost:3000/card.ttl'], this.getAge);
+        //this.virtualStore.addVirtualRoute('http://localhost:3000/ageAndKnows', {path: 'http://localhost:3000/card.ttl'}, this.composite);
+        this.virtualStore.addVirtualRouteStream('http://localhost:3000/ageAndKnows', ["http://localhost:3000/knows.ttl", 'http://localhost:3000/card.ttl'], this.composite);
+        //this.virtualStore.addVirtualRouteStream('http://localhost:3000/birthYear', {path: 'http://localhost:3000/age'}, this.getBirthYear);
+        this.virtualStore.addVirtualRouteStream('http://localhost:3000/friends', ['http://localhost:3000/knows.ttl'], this.getFriends);
     }
 
-    private getAge = (data: Quad): Quad | undefined => {
+    private getAge = (data: Quad): Quad[] => {
+        let out:Quad[] = [];
         if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
-            return quad(
-                data.subject,
-                namedNode("http://dbpedia.org/ontology/age"),
-                literal(yearsPassed(new Date(data.object.value))),
-                defaultGraph()
-            );
-        }
-    };
-
-    private getAge2 = (store: N3.Store): Quad[] => {
-        let out:Quad[] = []
-        for( const temp of store.match(null, namedNode('http://example.com/ontology/bornOn'), null)){
-            console.log(temp);
-        }
-        for (const data of store.match(null, namedNode('http://dbpedia.org/ontology/birthDate'), null)){
             out.push(quad(
                 data.subject,
                 namedNode("http://dbpedia.org/ontology/age"),
@@ -42,24 +29,42 @@ export class PathBuilder {
                 defaultGraph()
             ));
         }
+        return out;
+    };
+
+    //private composite = (store: N3.Store): Quad[] => {
+    private composite = (data:Quad): Quad[] => {
+        let out:Quad[] = []
+        const resultAge = this.getAge(data);
+        const resultKnows = this.getFriends(data);
+        if(resultAge.length > 0){
+            resultAge.forEach(value => out.push(value));
+        }
+        if(resultKnows.length > 0){
+            resultKnows.forEach(value => out.push(value));
+        }
         return out
     }
 
-    private getBirthYear = (data: Quad): Quad | undefined => {
+    private getBirthYear = (data: Quad): Quad[] => {
+        let out:Quad[] = [];
         if (data.predicate.equals(new NamedNode("http://dbpedia.org/ontology/age"))) {
-            return quad(
+            out.push(quad(
                 data.subject,
                 namedNode("http://dbpedia.org/ontology/birthYear"),
                 literal(new Date().getFullYear() - parseInt(data.object.value)),
                 defaultGraph()
-            )
+            ))
         }
+        return out;
     }
 
-    private getFriends = (data: Quad): Quad | undefined => {
+    private getFriends = (data: Quad): Quad[] => {
+        let out:Quad[] = [];
         if (data.predicate.equals(new NamedNode("http://xmlns.com/foaf/0.1/knows"))) {
-            return data;
+            out.push(data);
         }
+        return out;
     }
 }
 

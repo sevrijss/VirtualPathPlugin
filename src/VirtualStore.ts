@@ -15,6 +15,7 @@ import {
     ResourceStore,
     transformSafely
 } from "@solid/community-server";
+import {transformSafelySerial} from "./Util";
 
 const quadPrefs = {type: {'internal/quads': 1}};
 
@@ -47,43 +48,62 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      *
      * e.g. you want to derive the age from the quad with the birthdate.
      * @param name - identifier of the newly created resource
-     * @param original - identifier of the resource from which needs to be derived
+     * @param originals - identifiers of the resources from which needs to be derived
      * @param deriveFunction - the function to convert the original to the resource you want.
      */
     public addVirtualRouteStream(name: string,
-                                 original: ResourceIdentifier,
-                                 deriveFunction: (arg0: Quad) => Quad | undefined): void {
+                                 originals: string[],
+                                 deriveFunction: (arg0: Quad) => Quad[]): void {
         if (name in this.virtualIdentifiers) {
             this.logger.error("duplicate routes in Virtual routers");
             return
         }
-        if (original.path in this.dependencies) {
-            // @ts-ignore
-            this.dependencies[original.path] = this.dependencies[original.path] + name
-        } else {
-            // @ts-ignore
-            this.dependencies[original.path] = [name]
-        }
+        const sources: ResourceIdentifier[] = originals.map((val: string) => {
+            return {path: val}
+        })
+        sources.forEach((source: ResourceIdentifier) => {
+            if (source.path in this.dependencies) {
+                // @ts-ignore
+                this.dependencies[source.path].push(name)
+            } else {
+                // @ts-ignore
+                this.dependencies[source.path] = [name]
+            }
+        })
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
         // @ts-expect-error indexing doesn't work for some reason when using strings
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-                // You will almost certainly never need `then`
-                const result = await this.getRepresentation(original, quadPrefs, cond);
-
-
-                // Utility function from CSS, will make your life much easier
-                const transformedStream = transformSafely(result.data, {
+                let data = []
+                let dupes:N3.Store = new N3.Store()
+                for (const source of sources) {
+                    this.logger.info(`processing source: ${source.path}`)
+                    const input = await this.getRepresentation(source, quadPrefs)
+                    data.push(input.data)
+                }
+                // Utility function derived from CSS, will make your life much easier
+                const transformedStream = transformSafelySerial(data, {
                     transform(data: Quad): void {
-                        const result = deriveFunction(data);
-                        if (result) {
-                            this.push(result)
+                        const arr = deriveFunction(data)
+                        const result = arr.filter((item, index) => arr.indexOf(item) === index);
+                        if (result.length !== 0) {
+                            result.forEach(r => {
+                                if (!dupes.has(r)) {
+                                    dupes.add(r)
+                                    this.push(r);
+                                }
+                            })
                         }
                     },
                     objectMode: true,
                 });
-                const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
-                return await this.converter.handle({representation: out, identifier: original, preferences: prefs});
+
+                let temp = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
+                return await this.converter.handle({
+                    representation: temp,
+                    identifier: {path: `${name}`},
+                    preferences: prefs
+                });
             }
     }
 
@@ -105,7 +125,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         }
         if (original.path in this.dependencies) {
             // @ts-ignore
-            this.dependencies[original.path] = this.dependencies[original.path] + [name]
+            this.dependencies[original.path].push(name)
         } else {
             // @ts-ignore
             this.dependencies[original.path] = [name]
@@ -148,11 +168,12 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             // which the compiler can't work with because we need to return a Promise<Representation>
             return this.virtualIdentifiers[identifier.path](preferences, conditions);
         }
+        this.logger.info(`No virtual route: ${identifier.path}`)
         return this.source.getRepresentation(identifier, preferences, conditions)
     }
 
     setRepresentation(identifier: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier[]> {
-        console.log("in setRepresentations");
+        this.logger.info("in setRepresentations");
         let deps: ResourceIdentifier[] = []
         if (identifier.path in this.virtualIdentifiers) {
             throw new MethodNotAllowedHttpError();
@@ -160,9 +181,12 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             // @ts-ignore
             console.log(this.dependencies[identifier.path]);
             // @ts-ignore
-            deps = this.dependencies[identifier.path].forEach(s => {
-                return
+            this.dependencies[identifier.path].forEach((s: string) => {
+                deps.push({
+                    path: s
+                })
             })
+            console.log(deps);
         }
         return this.source.setRepresentation(identifier, representation, conditions).then(value => {
             deps.forEach(val => {
@@ -177,14 +201,17 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
 
 
     addResource(container: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier> {
+        this.logger.info("in addResource");
         return super.addResource(container, representation, conditions);
     }
 
     hasResource(identifier: ResourceIdentifier): Promise<boolean> {
+        this.logger.info("in hasResource");
         return super.hasResource(identifier);
     }
 
     async deleteResource(identifier: ResourceIdentifier, conditions ?: Conditions): Promise<ResourceIdentifier[]> {
+        this.logger.info("in deleteResource");
         let altered: ResourceIdentifier[] = []
         if (identifier.path in this.dependencies) {
             // @ts-ignore
@@ -207,6 +234,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 resolve(altered);
             })
         } else {
+            console.log("here");
             const result = super.deleteResource(identifier, conditions)
             result.then(
                 (a: ResourceIdentifier[]) => a.forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
@@ -216,6 +244,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     }
 
     modifyResource(identifier: ResourceIdentifier, patch: Patch, conditions ?: Conditions): Promise<ResourceIdentifier[]> {
+        this.logger.info("in modifyResource");
         console.log(`Modify Resource on ${identifier.path}`)
         if (identifier.path in this.virtualIdentifiers
         ) {

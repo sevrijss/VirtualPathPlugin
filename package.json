@@ -1,6 +1,7 @@
 {
   "devDependencies": {
     "@tsconfig/node14": "^1.0.1",
+    "@types/combined-stream": "^1.0.3",
     "@types/node-fetch": "^2.6.1",
     "componentsjs-generator": "^2.6.0",
     "ts-node": "^9.1.1",
@@ -15,6 +16,7 @@
   "description": "Extension for Community Solid Server to use virtual paths and derived data",
   "dependencies": {
     "@solid/community-server": "^4.0.1",
+    "combined-stream": "^1.0.8",
     "node-fetch": "^2.6.1"
   },
   "main": "./dist/index.js",
