@@ -15,6 +15,7 @@ export class PathBuilder {
         this.virtualStore.addVirtualRouteStream('http://localhost:3000/age', ['http://localhost:3000/card.ttl'], this.getAge);
         //this.virtualStore.addVirtualRoute('http://localhost:3000/ageAndKnows', {path: 'http://localhost:3000/card.ttl'}, this.composite);
         this.virtualStore.addVirtualRouteStream('http://localhost:3000/ageAndKnows', ["http://localhost:3000/knows.ttl", 'http://localhost:3000/card.ttl'], this.composite);
+        this.virtualStore.addVirtualRoute('http://localhost:3000/ageAndKnows2', ["http://localhost:3000/knows.ttl", 'http://localhost:3000/card.ttl'], this.composite2);
         //this.virtualStore.addVirtualRouteStream('http://localhost:3000/birthYear', {path: 'http://localhost:3000/age'}, this.getBirthYear);
         this.virtualStore.addVirtualRouteStream('http://localhost:3000/friends', ['http://localhost:3000/knows.ttl'], this.getFriends);
     }
@@ -32,7 +33,6 @@ export class PathBuilder {
         return out;
     };
 
-    //private composite = (store: N3.Store): Quad[] => {
     private composite = (data:Quad): Quad[] => {
         let out:Quad[] = []
         const resultAge = this.getAge(data);
@@ -42,6 +42,22 @@ export class PathBuilder {
         }
         if(resultKnows.length > 0){
             resultKnows.forEach(value => out.push(value));
+        }
+        return out
+    }
+
+    private composite2 = (store: N3.Store): Quad[] => {
+        let out:Quad[] = []
+        for (const data of store.match(null, namedNode('http://dbpedia.org/ontology/birthDate'), null)){
+            out.push(quad(
+                data.subject,
+                namedNode("http://dbpedia.org/ontology/age"),
+                literal(yearsPassed(new Date(data.object.value))),
+                defaultGraph()
+            ));
+        }
+        for (const data of store.match(null, namedNode("http://xmlns.com/foaf/0.1/knows"), null)){
+            out.push(data);
         }
         return out
     }

@@ -12,8 +12,7 @@ import {
     RepresentationConverter,
     RepresentationPreferences,
     ResourceIdentifier,
-    ResourceStore,
-    transformSafely
+    ResourceStore
 } from "@solid/community-server";
 import {transformSafelySerial} from "./Util";
 
@@ -75,7 +74,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
                 let data = []
-                let dupes:N3.Store = new N3.Store()
+                let dupes: N3.Store = new N3.Store()
                 for (const source of sources) {
                     this.logger.info(`processing source: ${source.path}`)
                     const input = await this.getRepresentation(source, quadPrefs)
@@ -101,7 +100,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 let temp = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
                 return await this.converter.handle({
                     representation: temp,
-                    identifier: {path: `${name}`},
+                    identifier: {path: name},
                     preferences: prefs
                 });
             }
@@ -112,36 +111,47 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      *
      * Used for more complex conversions.
      * @param name - identifier of the newly created resource
-     * @param original - identifier of the resource from which needs to be derived
+     * @param originals - identifier of the resource from which needs to be derived
      * @param deriveFunction - the function to convert the original to the resource you want.
      */
     public addVirtualRoute(name: string,
-                           original: ResourceIdentifier,
+                           originals: string[],
                            deriveFunction: (arg0: N3.Store) => Quad[]): void {
-        const store = new N3.Store();
+
         if (name in this.virtualIdentifiers) {
             this.logger.error("duplicate routes in Virtual routers");
             return
         }
-        if (original.path in this.dependencies) {
-            // @ts-ignore
-            this.dependencies[original.path].push(name)
-        } else {
-            // @ts-ignore
-            this.dependencies[original.path] = [name]
-        }
+        const sources: ResourceIdentifier[] = originals.map((val: string) => {
+            return {path: val}
+        })
+        sources.forEach((source: ResourceIdentifier) => {
+            if (source.path in this.dependencies) {
+                // @ts-ignore
+                this.dependencies[source.path].push(name)
+            } else {
+                // @ts-ignore
+                this.dependencies[source.path] = [name]
+            }
+        })
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
         // @ts-expect-error indexing doesn't work for some reason when using strings
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-                // You will almost certainly never need `then`
-                const result = await this.getRepresentation(original, quadPrefs, cond);
+                const store = new N3.Store();
+                let data = []
+                for (const source of sources) {
+                    this.logger.info(`processing source: ${source.path}`)
+                    const input = await this.getRepresentation(source, quadPrefs)
+                    data.push(input.data)
+                }
 
-
-                // Utility function from CSS, will make your life much easier
-                const transformedStream = transformSafely(result.data, {
+                // Utility function derived from CSS, will make your life much easier
+                const transformedStream = transformSafelySerial(data, {
                     transform(data: Quad): void {
-                        store.add(data)
+                        if (!store.has(data)) {
+                            store.add(data)
+                        }
                     },
                     flush() {
                         const result = deriveFunction(store)
@@ -152,7 +162,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     objectMode: true,
                 });
                 const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
-                return await this.converter.handle({representation: out, identifier: original, preferences: prefs});
+                return await this.converter.handle({representation: out, identifier: {path: name}, preferences: prefs});
             }
     }
 
