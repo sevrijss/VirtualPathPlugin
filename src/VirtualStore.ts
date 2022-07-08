@@ -76,7 +76,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 let data = []
                 let dupes: N3.Store = new N3.Store()
                 for (const source of sources) {
-                    this.logger.info(`processing source: ${source.path}`)
                     const input = await this.getRepresentation(source, quadPrefs)
                     data.push(input.data)
                 }
@@ -141,7 +140,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 const store = new N3.Store();
                 let data = []
                 for (const source of sources) {
-                    this.logger.info(`processing source: ${source.path}`)
                     const input = await this.getRepresentation(source, quadPrefs)
                     data.push(input.data)
                 }
@@ -173,17 +171,15 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         conditions?: Conditions,
     ): Promise<Representation> {
         if (identifier.path in this.virtualIdentifiers) {
-            this.logger.info(`[PROCESSING\t${identifier.path}]\tVIRTUAL PATH`);
+            this.logger.info(`processing ${identifier.path} as derived document`);
             // @ts-expect-error The object returns an any type,
             // which the compiler can't work with because we need to return a Promise<Representation>
             return this.virtualIdentifiers[identifier.path](preferences, conditions);
         }
-        this.logger.info(`No virtual route: ${identifier.path}`)
         return this.source.getRepresentation(identifier, preferences, conditions)
     }
 
     setRepresentation(identifier: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier[]> {
-        this.logger.info("in setRepresentations");
         let deps: ResourceIdentifier[] = []
         if (identifier.path in this.virtualIdentifiers) {
             throw new MethodNotAllowedHttpError();
@@ -211,17 +207,14 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
 
 
     addResource(container: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier> {
-        this.logger.info("in addResource");
         return super.addResource(container, representation, conditions);
     }
 
     hasResource(identifier: ResourceIdentifier): Promise<boolean> {
-        this.logger.info("in hasResource");
         return super.hasResource(identifier);
     }
 
     async deleteResource(identifier: ResourceIdentifier, conditions ?: Conditions): Promise<ResourceIdentifier[]> {
-        this.logger.info("in deleteResource");
         let altered: ResourceIdentifier[] = []
         if (identifier.path in this.dependencies) {
             // @ts-ignore
@@ -237,14 +230,11 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             // @ts-ignore problems with string indexing
             delete this.virtualIdentifiers[name]
 
-            console.log(altered);
-
             altered.forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
             return new Promise((resolve, reject) => {
                 resolve(altered);
             })
         } else {
-            console.log("here");
             const result = super.deleteResource(identifier, conditions)
             result.then(
                 (a: ResourceIdentifier[]) => a.forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
@@ -254,8 +244,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     }
 
     modifyResource(identifier: ResourceIdentifier, patch: Patch, conditions ?: Conditions): Promise<ResourceIdentifier[]> {
-        this.logger.info("in modifyResource");
-        console.log(`Modify Resource on ${identifier.path}`)
         if (identifier.path in this.virtualIdentifiers
         ) {
             throw new MethodNotAllowedHttpError();
