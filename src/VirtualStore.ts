@@ -48,11 +48,15 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * e.g. you want to derive the age from the quad with the birthdate.
      * @param name - identifier of the newly created resource
      * @param originals - identifiers of the resources from which needs to be derived
-     * @param deriveFunction - the function to convert the original to the resource you want.
+     * @param startFunction - function that will be called before the data arrives
+     * @param deriveFunction - function that will be called with the data chunks
+     * @param endFunction - function  that will be called after the data arrives
      */
     public addVirtualRouteStream(name: string,
                                  originals: string[],
-                                 deriveFunction: (arg0: Quad) => Quad[]): void {
+                                 startFunction: undefined | ((arg0: void) => void),
+                                 deriveFunction: (arg0: Quad) => Quad[],
+                                 endFunction: ((arg0: void) => Quad[])): void {
         if (name in this.virtualIdentifiers) {
             this.logger.error("duplicate routes in Virtual routers");
             return
@@ -79,17 +83,26 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     const input = await this.getRepresentation(source, quadPrefs)
                     data.push(input.data)
                 }
+                if (startFunction) {
+                    startFunction();
+                }
                 // Utility function derived from CSS, will make your life much easier
                 const transformedStream = transformSafelySerial(data, {
                     transform(data: Quad): void {
-                        const arr = deriveFunction(data)
-                        const result = arr.filter((item, index) => arr.indexOf(item) === index);
+                        const res = deriveFunction(data);
+                        if(res.length > 0){
+                            res.forEach(val => {
+                                this.push(val)
+                                console.log(val);
+                            });
+                        }
+                    },
+                    flush(): void {
+                        const result = endFunction();
                         if (result.length !== 0) {
                             result.forEach(r => {
-                                if (!dupes.has(r)) {
-                                    dupes.add(r)
-                                    this.push(r);
-                                }
+                                this.push(r);
+                                console.log(r);
                             })
                         }
                     },

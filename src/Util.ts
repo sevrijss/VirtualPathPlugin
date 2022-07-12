@@ -1,5 +1,13 @@
-import {AsyncTransformOptions, getLoggerFor, Guarded, guardStream} from "@solid/community-server";
+import {
+    AsyncTransformOptions,
+    getLoggerFor,
+    Guarded,
+    guardStream,
+    isHttpRequest,
+    pipeSafely
+} from "@solid/community-server";
 import {Transform, Writable} from "stream";
+import pump from 'pump';
 
 /**
  * The streamingUtils in this file are base one the utils found in the
@@ -53,7 +61,7 @@ export function transformSafelySerial<T = any>(
 
 function pipeSafelySerial<T extends Writable>(readables: NodeJS.ReadableStream[], destination: T,
                                               mapError?: (error: Error) => Error): Guarded<T> {
-    /*for(const readable of readables) {
+    /*
         // We never want to closes the incoming HttpRequest if there is an error
         // since that also closes the outgoing HttpResponse.
         // Since `pump` sends stream errors both up and down the pipe chain,
@@ -80,8 +88,8 @@ function pipeSafelySerial<T extends Writable>(readables: NodeJS.ReadableStream[]
                 }
             });
         }
-    }*/
-    if (readables.length == 1) {
+    */
+    /*if (readables.length == 1) {
         readables[0].pipe(destination)
     } else {
         const first = readables[0]
@@ -90,6 +98,34 @@ function pipeSafelySerial<T extends Writable>(readables: NodeJS.ReadableStream[]
         first.on("close", () => {
             first.unpipe(destination);
             pipeSafelySerial(rest, destination, mapError)
+        })
+    }*/
+    if(readables.length == 1){
+        return pipeSafely(readables[0], destination, mapError);
+    }
+    const r = readables[0]
+    if(isHttpRequest(r)){
+        r.pipe(destination, {end: false});
+        r.on("error", (error):void => {
+            destination.destroy(mapError ? mapError(error) : error);
+        })
+        r.on("close", () : void => {
+            pipeSafelySerial(readables.slice(1,readables.length), destination, mapError);
+        })
+    } else {
+        r.pipe(destination, {end: false});
+        r.on("error", (error):void => {
+            if (error) {
+                const msg = `Piped stream errored with ${error.message}`;
+                logger.log(safeErrors.has(error.message) ? 'debug' : 'warn', msg);
+
+                // Make sure the final error can be handled in a normal streaming fashion
+                destination.emit('error', mapError ? mapError(error) : error);
+                destination.destroy(mapError? mapError(error):error)
+            }
+        })
+        r.on("close", ():void => {
+            pipeSafelySerial(readables.slice(1, readables.length), destination, mapError);
         })
     }
     // Guarding the stream now means the internal error listeners of pump will be ignored
