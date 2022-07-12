@@ -10,6 +10,9 @@
       "@type": "VirtualStore",
       "converter": {
         "@id": "urn:solid-server:default:RepresentationConverter"
+      },
+      "urlBuilder": {
+        "@id": "urn:virtualStore:default:UrlBuilder"
       }
     }
   ]

@@ -1,71 +1,116 @@
-import {VirtualStore} from "./VirtualStore";
+import {VirtualStore} from "./util/VirtualStore";
 import {Quad} from "rdf-js";
-import {DataFactory, NamedNode} from "n3";
-import N3 from 'n3';
+import N3, {DataFactory, NamedNode} from "n3";
+import {Processor} from "./util/Processor";
 
 const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
-export * from "./VirtualStore";
+export * from "./util/VirtualStore";
+export * from "./util/PathResolver";
 
-export class PathBuilder {
-    private readonly virtualStore: VirtualStore;
-
-    public constructor(vStore: VirtualStore) {
-        this.virtualStore = vStore;
-        this.virtualStore.addVirtualRouteStream('http://localhost:3000/age', {path: 'http://localhost:3000/card.ttl'}, this.getAge);
-        this.virtualStore.addVirtualRoute('http://localhost:3000/age2', {path: 'http://localhost:3000/card.ttl'}, this.getAge2);
-        this.virtualStore.addVirtualRouteStream('http://localhost:3000/birthYear', {path: 'http://localhost:3000/age'}, this.getBirthYear);
-        this.virtualStore.addVirtualRouteStream('http://localhost:3000/friends', {path: 'http://localhost:3000/card.ttl'}, this.getFriends);
-    }
-
-    private getAge = (data: Quad): Quad | undefined => {
+/**
+ * Example of an extended processor object
+ */
+class Age extends Processor {
+    process(data: Quad): Quad[] {
+        let out = []
         if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
-            return quad(
-                data.subject,
-                namedNode("http://dbpedia.org/ontology/age"),
-                literal(yearsPassed(new Date(data.object.value))),
-                defaultGraph()
-            );
-        }
-    };
-
-    private getAge2 = (store: N3.Store): Quad[] => {
-        let out:Quad[] = []
-        for( const temp of store.match(null, namedNode('http://example.com/ontology/bornOn'), null)){
-            console.log(temp);
-        }
-        for (const data of store.match(null, namedNode('http://dbpedia.org/ontology/birthDate'), null)){
             out.push(quad(
                 data.subject,
                 namedNode("http://dbpedia.org/ontology/age"),
-                literal(yearsPassed(new Date(data.object.value))),
+                literal(Age.yearsPassed(new Date(data.object.value))),
                 defaultGraph()
             ));
         }
         return out
     }
 
-    private getBirthYear = (data: Quad): Quad | undefined => {
+    static yearsPassed(date: Date) {
+        const now = new Date().getTime()
+        const then = date.getTime();
+        const diff = now - then;
+        return Math.floor(diff / (1000 * 60 * 60 * 24 * 365))
+    }
+
+}
+
+/**
+ * class which builds relative paths
+ */
+export class PathBuilder {
+    private readonly virtualStore: VirtualStore;
+
+    public constructor(vStore: VirtualStore) {
+        this.virtualStore = vStore;
+        const age = new Age()
+        this.virtualStore.addVirtualRouteStream('/age', ['/card.ttl'], age.start, age.process, age.onClose);
+        this.virtualStore.addVirtualRouteStreamProcessor('/age', ['/card.ttl'], age);
+        this.virtualStore.addVirtualRouteStream('/ageAndKnows', ["/knows.ttl", '/card.ttl'], undefined, this.composite, () => []);
+        this.virtualStore.addVirtualRoute('/ageAndKnows2', ["/knows.ttl", '/card.ttl'], this.composite2);
+        this.virtualStore.addVirtualRouteStream('/birthYear', ['/age'], undefined, this.getBirthYear, () => []);
+        this.virtualStore.addVirtualRouteStream('/friends', ['/knows.ttl'], undefined, this.getFriends, () => []);
+    }
+
+    private getAge = (data: Quad): Quad[] => {
+        const out = []
+        if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
+            out.push(quad(
+                data.subject,
+                namedNode("http://dbpedia.org/ontology/age"),
+                literal(Age.yearsPassed(new Date(data.object.value))),
+                defaultGraph()
+            ));
+        }
+        return out;
+    };
+
+    private composite = (data: Quad): Quad[] => {
+        let out: Quad[] = []
+        const resultAge = this.getAge(data);
+        const resultKnows = this.getFriends(data);
+        if (resultAge.length > 0) {
+            resultAge.forEach(value => out.push(value));
+        }
+        if (resultKnows.length > 0) {
+            resultKnows.forEach(value => out.push(value));
+        }
+        return out
+    }
+
+    private composite2 = (store: N3.Store): Quad[] => {
+        let out: Quad[] = []
+        for (const data of store.match(null, namedNode('http://dbpedia.org/ontology/birthDate'), null)) {
+            out.push(quad(
+                data.subject,
+                namedNode("http://dbpedia.org/ontology/age"),
+                literal(Age.yearsPassed(new Date(data.object.value))),
+                defaultGraph()
+            ));
+        }
+        for (const data of store.match(null, namedNode("http://xmlns.com/foaf/0.1/knows"), null)) {
+            out.push(data);
+        }
+        return out
+    }
+
+    private getBirthYear = (data: Quad): Quad[] => {
+        let out: Quad[] = [];
         if (data.predicate.equals(new NamedNode("http://dbpedia.org/ontology/age"))) {
-            return quad(
+            out.push(quad(
                 data.subject,
                 namedNode("http://dbpedia.org/ontology/birthYear"),
                 literal(new Date().getFullYear() - parseInt(data.object.value)),
                 defaultGraph()
-            )
+            ))
         }
+        return out;
     }
 
-    private getFriends = (data: Quad): Quad | undefined => {
+    private getFriends = (data: Quad): Quad[] => {
+        let out: Quad[] = [];
         if (data.predicate.equals(new NamedNode("http://xmlns.com/foaf/0.1/knows"))) {
-            return data;
+            out.push(data);
         }
+        return out;
     }
-}
-
-function yearsPassed(date: Date) {
-    const now = new Date().getTime()
-    const then = date.getTime();
-    const diff = now - then;
-    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365))
 }
