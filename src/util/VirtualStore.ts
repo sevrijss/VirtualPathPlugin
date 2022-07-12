@@ -22,11 +22,6 @@ const quadPrefs = {type: {'internal/quads': 1}};
 
 /**
  * Allow containers to have derived resources.
- * Derived resources can be defined by creating a new route via
- * {@link addVirtualRouteStream} or {@link addVirtualRoute}.
- * Both functions require a new identifier for the derived resource,
- * the identifier of the original resource, and a function to
- * perform the conversion from the original to the derived resource.
  */
 export class VirtualStore<T extends ResourceStore = ResourceStore> extends PassthroughStore<T> {
     protected readonly source: T;
@@ -45,6 +40,15 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         this.urlBuilder = urlBuilder;
     }
 
+    /**
+     * Keeps dependencies between existing resources and their derived ones.
+     * The dependencies are used when resources are modified or deleted
+     * @param name - name of the derived resources
+     * @param originals - name of the resources from which something is derived
+     * @private
+     *
+     * @returns list of resourceIdentifiers for the original resources
+     */
     private checkDependencies(name: string, originals: string[]): ResourceIdentifier[] {
         if (name in this.virtualIdentifiers) {
             this.logger.error("duplicate routes in Virtual routers");
@@ -68,25 +72,24 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     /**
      * Create a derived resource for which the processing function works on single Quads.
      *
-     * e.g. you want to derive the age from the quad with the birthdate.
+     * The Quads are supplied in a streaming fashion: one by one.
+     *
      * @param name - identifier of the newly created resource
      * @param originals - identifiers of the resources from which needs to be derived
-     * @param startFunction - function that will be called before the data arrives
-     * @param deriveFunction - function that will be called with the data chunks
-     * @param endFunction - function  that will be called after the data arrives
+     * @param startFunction - function that will be called before the data arrives (Optional)
+     * @param deriveFunction - function that will be called with the data chunks (Quads)
+     * @param endFunction - function that will be called after the data arrives (Optional)
      */
     public addVirtualRouteStream(name: string,
                                  originals: string[],
                                  startFunction: undefined | ((arg0: void) => void),
                                  deriveFunction: (arg0: Quad) => Quad[],
-                                 endFunction: ((arg0: void) => Quad[])): void {
+                                 endFunction: undefined | ((arg0: void) => Quad[])): void {
         name = this.urlBuilder.resolve(name);
         const sources = this.checkDependencies(name, originals);
         if (sources.length === 0) {
             return;
         }
-        // Construct a new function to use the original resource and pass on any preferences and/or conditions
-        // @ts-expect-error indexing doesn't work for some reason when using strings
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
                 this.logger.info(name);
@@ -113,14 +116,16 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                         }
                     },
                     flush(): void {
-                        const result = endFunction();
-                        if (result.length !== 0) {
-                            result.forEach(r => {
-                                if (!dupes.has(r)) {
-                                    this.push(r);
-                                    dupes.add(r);
-                                }
-                            })
+                        if (endFunction) {
+                            const result = endFunction();
+                            if (result.length !== 0) {
+                                result.forEach(r => {
+                                    if (!dupes.has(r)) {
+                                        this.push(r);
+                                        dupes.add(r);
+                                    }
+                                })
+                            }
                         }
                     },
                     objectMode: true,
@@ -135,16 +140,22 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             }
     }
 
-    public addVirtualRouteStreamProcessor(name:string, originals:string[], processor:Processor): void {
+    /**
+     * Creates a derived resource with a processor object for handling
+     *
+     * @param name - identifier of the newly created resource
+     * @param originals - identifiers of the resources from which needs to be derived
+     * @param processor - processor object
+     */
+    public addVirtualRouteStreamProcessor(name: string, originals: string[], processor: Processor): void {
         return this.addVirtualRouteStream(name, originals, processor.start, processor.process, processor.onClose);
     }
 
     /**
      * Create a derived resource for which the processing function works on a store of Quads.
      *
-     * Used for more complex conversions.
      * @param name - identifier of the newly created resource
-     * @param originals - identifier of the resource from which needs to be derived
+     * @param originals - identifiers of the resources from which needs to be derived
      * @param deriveFunction - the function to convert the original to the resource you want.
      */
     public addVirtualRoute(name: string,
@@ -186,7 +197,8 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             }
     }
 
-    // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
+    // Below are modified versions of the corresponding method in PassthroughStore to deal with dependencies
+
     async getRepresentation(
         identifier: ResourceIdentifier,
         preferences: RepresentationPreferences,

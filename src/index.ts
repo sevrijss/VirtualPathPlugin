@@ -8,8 +8,10 @@ const {namedNode, literal, defaultGraph, quad} = DataFactory;
 export * from "./util/VirtualStore";
 export * from "./util/PathResolver";
 
-class Age extends Processor{
-
+/**
+ * Example of an extended processor object
+ */
+class Age extends Processor {
     process(data: Quad): Quad[] {
         let out = []
         if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
@@ -32,6 +34,9 @@ class Age extends Processor{
 
 }
 
+/**
+ * class which builds relative paths
+ */
 export class PathBuilder {
     private readonly virtualStore: VirtualStore;
 
