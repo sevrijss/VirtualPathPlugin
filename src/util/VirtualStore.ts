@@ -90,6 +90,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         if (sources.length === 0) {
             return;
         }
+        // @ts-ignore
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
                 this.logger.info(name);
