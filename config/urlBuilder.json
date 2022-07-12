@@ -1,0 +1,14 @@
+{
+  "@context": [
+    "https://linkedsoftwaredependencies.org/bundles/npm/@solid/community-server/^4.0.0/components/context.jsonld",
+    "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server/^0.0.0/components/context.jsonld"
+  ],
+  "@graph": [
+    {
+      "comment": "URL builder so we can define relative paths",
+      "@id": "urn:virtualStore:default:UrlBuilder",
+      "@type": "UrlBuilder",
+      "url": { "@id": "urn:solid-server:default:variable:baseUrl" }
+    }
+  ]
+}

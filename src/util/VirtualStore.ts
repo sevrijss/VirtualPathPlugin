@@ -14,8 +14,8 @@ import {
     ResourceIdentifier,
     ResourceStore
 } from "@solid/community-server";
-import {transformSafelySerial} from "./Util";
-
+import {transformSafelySerial} from "./StreamUtils";
+import {UrlBuilder} from "./PathResolver";
 const quadPrefs = {type: {'internal/quads': 1}};
 
 /**
@@ -30,16 +30,37 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     protected readonly source: T;
     private readonly converter: RepresentationConverter;
     private readonly logger = getLoggerFor(this);
-
+    private readonly urlBuilder;
 
     private virtualIdentifiers = {};
 
     private dependencies = {};
 
-    public constructor(source: T, converter: RepresentationConverter) {
+    public constructor(source: T, converter: RepresentationConverter, urlBuilder:UrlBuilder) {
         super(source);
         this.source = source;
         this.converter = converter;
+        this.urlBuilder = urlBuilder;
+    }
+
+    private checkDependencies(name:string, originals:string[]) : ResourceIdentifier[]{
+        if (name in this.virtualIdentifiers) {
+            this.logger.error("duplicate routes in Virtual routers");
+            return []
+        }
+        const sources: ResourceIdentifier[] = originals.map((val: string) => {
+            return {path: this.urlBuilder.resolve(val)}
+        })
+        originals.forEach((source: string) => {
+            if (source in this.dependencies) {
+                // @ts-ignore
+                this.dependencies[source].push(name)
+            } else {
+                // @ts-ignore
+                this.dependencies[source] = [name]
+            }
+        })
+        return sources;
     }
 
     /**
@@ -57,26 +78,16 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                                  startFunction: undefined | ((arg0: void) => void),
                                  deriveFunction: (arg0: Quad) => Quad[],
                                  endFunction: ((arg0: void) => Quad[])): void {
-        if (name in this.virtualIdentifiers) {
-            this.logger.error("duplicate routes in Virtual routers");
-            return
+        name = this.urlBuilder.resolve(name);
+        const sources = this.checkDependencies(name, originals);
+        if(sources.length === 0){
+            return;
         }
-        const sources: ResourceIdentifier[] = originals.map((val: string) => {
-            return {path: val}
-        })
-        sources.forEach((source: ResourceIdentifier) => {
-            if (source.path in this.dependencies) {
-                // @ts-ignore
-                this.dependencies[source.path].push(name)
-            } else {
-                // @ts-ignore
-                this.dependencies[source.path] = [name]
-            }
-        })
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
         // @ts-expect-error indexing doesn't work for some reason when using strings
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+                this.logger.info(name);
                 let data = []
                 let dupes: N3.Store = new N3.Store()
                 for (const source of sources) {
@@ -93,7 +104,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                         if(res.length > 0){
                             res.forEach(val => {
                                 this.push(val)
-                                console.log(val);
                             });
                         }
                     },
@@ -102,7 +112,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                         if (result.length !== 0) {
                             result.forEach(r => {
                                 this.push(r);
-                                console.log(r);
                             })
                         }
                     },
@@ -129,23 +138,11 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     public addVirtualRoute(name: string,
                            originals: string[],
                            deriveFunction: (arg0: N3.Store) => Quad[]): void {
-
-        if (name in this.virtualIdentifiers) {
-            this.logger.error("duplicate routes in Virtual routers");
-            return
+        name = this.urlBuilder.resolve(name);
+        const sources = this.checkDependencies(name, originals);
+        if(sources.length === 0){
+            return;
         }
-        const sources: ResourceIdentifier[] = originals.map((val: string) => {
-            return {path: val}
-        })
-        sources.forEach((source: ResourceIdentifier) => {
-            if (source.path in this.dependencies) {
-                // @ts-ignore
-                this.dependencies[source.path].push(name)
-            } else {
-                // @ts-ignore
-                this.dependencies[source.path] = [name]
-            }
-        })
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
         // @ts-expect-error indexing doesn't work for some reason when using strings
         this.virtualIdentifiers[name] =

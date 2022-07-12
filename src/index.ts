@@ -1,10 +1,11 @@
-import {VirtualStore} from "./VirtualStore";
+import {VirtualStore} from "./util/VirtualStore";
 import {Quad} from "rdf-js";
 import N3, {DataFactory, NamedNode} from "n3";
 
 const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
-export * from "./VirtualStore";
+export * from "./util/VirtualStore";
+export * from "./util/PathResolver";
 
 class Age {
 
@@ -48,10 +49,10 @@ export class PathBuilder {
     public constructor(vStore: VirtualStore) {
         this.virtualStore = vStore;
         const age = new Age()
-        this.virtualStore.addVirtualRouteStream('http://localhost:3000/age', ['http://localhost:3000/card.ttl'], age.start, age.process, age.onClose);
+        this.virtualStore.addVirtualRouteStream('/age', ['/card.ttl'], age.start, age.process, age.onClose);
         //this.virtualStore.addVirtualRoute('http://localhost:3000/ageAndKnows', {path: 'http://localhost:3000/card.ttl'}, this.composite);
         //this.virtualStore.addVirtualRouteStream('http://localhost:3000/ageAndKnows', ["http://localhost:3000/knows.ttl", 'http://localhost:3000/card.ttl'], undefined, this.composite, undefined);
-        this.virtualStore.addVirtualRoute('http://localhost:3000/ageAndKnows2', ["http://localhost:3000/knows.ttl", 'http://localhost:3000/card.ttl'], this.composite2);
+        this.virtualStore.addVirtualRoute('/ageAndKnows2', ["/knows.ttl", '/card.ttl'], this.composite2);
         //this.virtualStore.addVirtualRouteStream('http://localhost:3000/birthYear', {path: 'http://localhost:3000/age'}, this.getBirthYear);
         //this.virtualStore.addVirtualRouteStream('http://localhost:3000/friends', ['http://localhost:3000/knows.ttl'], undefined, this.getFriends, undefined);
     }
