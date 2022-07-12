@@ -1,20 +1,14 @@
 import {VirtualStore} from "./util/VirtualStore";
 import {Quad} from "rdf-js";
 import N3, {DataFactory, NamedNode} from "n3";
+import {Processor} from "./util/Processor";
 
 const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
 export * from "./util/VirtualStore";
 export * from "./util/PathResolver";
 
-class Age {
-
-    constructor() {
-    }
-
-    start(): void {
-        console.log("starting processor");
-    }
+class Age extends Processor{
 
     process(data: Quad): Quad[] {
         let out = []
@@ -28,11 +22,6 @@ class Age {
         }
         return out
     }
-
-    onClose(): Quad[] {
-        return [];
-    }
-
 
     static yearsPassed(date: Date) {
         const now = new Date().getTime()
@@ -50,30 +39,29 @@ export class PathBuilder {
         this.virtualStore = vStore;
         const age = new Age()
         this.virtualStore.addVirtualRouteStream('/age', ['/card.ttl'], age.start, age.process, age.onClose);
-        //this.virtualStore.addVirtualRoute('http://localhost:3000/ageAndKnows', {path: 'http://localhost:3000/card.ttl'}, this.composite);
-        //this.virtualStore.addVirtualRouteStream('http://localhost:3000/ageAndKnows', ["http://localhost:3000/knows.ttl", 'http://localhost:3000/card.ttl'], undefined, this.composite, undefined);
+        this.virtualStore.addVirtualRouteStreamProcessor('/age', ['/card.ttl'], age);
+        this.virtualStore.addVirtualRouteStream('/ageAndKnows', ["/knows.ttl", '/card.ttl'], undefined, this.composite, () => []);
         this.virtualStore.addVirtualRoute('/ageAndKnows2', ["/knows.ttl", '/card.ttl'], this.composite2);
-        //this.virtualStore.addVirtualRouteStream('http://localhost:3000/birthYear', {path: 'http://localhost:3000/age'}, this.getBirthYear);
-        //this.virtualStore.addVirtualRouteStream('http://localhost:3000/friends', ['http://localhost:3000/knows.ttl'], undefined, this.getFriends, undefined);
+        this.virtualStore.addVirtualRouteStream('/birthYear', ['/age'], undefined, this.getBirthYear, () => []);
+        this.virtualStore.addVirtualRouteStream('/friends', ['/knows.ttl'], undefined, this.getFriends, () => []);
     }
 
-    private out: Quad[] = [];
-    private getAge = (data: Quad): void => {
+    private getAge = (data: Quad): Quad[] => {
+        const out = []
         if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
-            this.out.push(quad(
+            out.push(quad(
                 data.subject,
                 namedNode("http://dbpedia.org/ontology/age"),
                 literal(Age.yearsPassed(new Date(data.object.value))),
                 defaultGraph()
             ));
         }
+        return out;
     };
 
     private composite = (data: Quad): Quad[] => {
         let out: Quad[] = []
-        this.out = []
-        this.getAge(data);
-        const resultAge = this.out
+        const resultAge = this.getAge(data);
         const resultKnows = this.getFriends(data);
         if (resultAge.length > 0) {
             resultAge.forEach(value => out.push(value));

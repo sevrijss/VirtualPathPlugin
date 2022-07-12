@@ -16,6 +16,8 @@ import {
 } from "@solid/community-server";
 import {transformSafelySerial} from "./StreamUtils";
 import {UrlBuilder} from "./PathResolver";
+import {Processor} from "./Processor";
+
 const quadPrefs = {type: {'internal/quads': 1}};
 
 /**
@@ -36,14 +38,14 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
 
     private dependencies = {};
 
-    public constructor(source: T, converter: RepresentationConverter, urlBuilder:UrlBuilder) {
+    public constructor(source: T, converter: RepresentationConverter, urlBuilder: UrlBuilder) {
         super(source);
         this.source = source;
         this.converter = converter;
         this.urlBuilder = urlBuilder;
     }
 
-    private checkDependencies(name:string, originals:string[]) : ResourceIdentifier[]{
+    private checkDependencies(name: string, originals: string[]): ResourceIdentifier[] {
         if (name in this.virtualIdentifiers) {
             this.logger.error("duplicate routes in Virtual routers");
             return []
@@ -80,7 +82,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                                  endFunction: ((arg0: void) => Quad[])): void {
         name = this.urlBuilder.resolve(name);
         const sources = this.checkDependencies(name, originals);
-        if(sources.length === 0){
+        if (sources.length === 0) {
             return;
         }
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
@@ -101,9 +103,12 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 const transformedStream = transformSafelySerial(data, {
                     transform(data: Quad): void {
                         const res = deriveFunction(data);
-                        if(res.length > 0){
+                        if (res.length > 0) {
                             res.forEach(val => {
-                                this.push(val)
+                                if (!dupes.has(val)) {
+                                    this.push(val)
+                                    dupes.add(val);
+                                }
                             });
                         }
                     },
@@ -111,7 +116,10 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                         const result = endFunction();
                         if (result.length !== 0) {
                             result.forEach(r => {
-                                this.push(r);
+                                if (!dupes.has(r)) {
+                                    this.push(r);
+                                    dupes.add(r);
+                                }
                             })
                         }
                     },
@@ -127,6 +135,10 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             }
     }
 
+    public addVirtualRouteStreamProcessor(name:string, originals:string[], processor:Processor): void {
+        return this.addVirtualRouteStream(name, originals, processor.start, processor.process, processor.onClose);
+    }
+
     /**
      * Create a derived resource for which the processing function works on a store of Quads.
      *
@@ -140,7 +152,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                            deriveFunction: (arg0: N3.Store) => Quad[]): void {
         name = this.urlBuilder.resolve(name);
         const sources = this.checkDependencies(name, originals);
-        if(sources.length === 0){
+        if (sources.length === 0) {
             return;
         }
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
