@@ -14,7 +14,7 @@ import {
     ResourceIdentifier,
     ResourceStore
 } from "@solid/community-server";
-import {transformSafelySerial} from "./StreamUtils";
+import {transformSafelyMultiple} from "./StreamUtils";
 import {UrlBuilder} from "./PathResolver";
 import {Processor} from "./Processor";
 
@@ -25,9 +25,9 @@ const quadPrefs = {type: {'internal/quads': 1}};
  */
 export class VirtualStore<T extends ResourceStore = ResourceStore> extends PassthroughStore<T> {
     protected readonly source: T;
-    private readonly converter: RepresentationConverter;
+    readonly converter: RepresentationConverter;
     private readonly logger = getLoggerFor(this);
-    private readonly urlBuilder;
+    readonly urlBuilder : UrlBuilder;
 
     private virtualIdentifiers = {};
 
@@ -69,6 +69,37 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         return sources;
     }
 
+    public addVirtualRouteRemoteSource(name: string,
+                                       getResource: () => Promise<Representation>,
+                                       processFunction: (arg0: N3.Store) => Quad[]){
+        name = this.urlBuilder.resolve(name);
+        // Construct a new function to use the original resource and pass on any preferences and/or conditions
+        // @ts-expect-error indexing doesn't work for some reason when using strings
+        this.virtualIdentifiers[name] =
+            async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+                const store = new N3.Store();
+                let data = [(await getResource()).data]
+
+                // Utility function derived from CSS, will make your life much easier
+                const transformedStream = transformSafelyMultiple(data, {
+                    transform(data: Quad): void {
+                        if (!store.has(data)) {
+                            store.add(data)
+                        }
+                    },
+                    flush() {
+                        const result = processFunction(store)
+                        result.forEach(val => {
+                            this.push(val)
+                        });
+                    },
+                    objectMode: true,
+                });
+                const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
+                return await this.converter.handle({representation: out, identifier: {path: name}, preferences: prefs});
+            }
+    }
+
     /**
      * Create a derived resource for which the processing function works on single Quads.
      *
@@ -104,7 +135,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     startFunction();
                 }
                 // Utility function derived from CSS, will make your life much easier
-                const transformedStream = transformSafelySerial(data, {
+                const transformedStream = transformSafelyMultiple(data, {
                     transform(data: Quad): void {
                         const res = deriveFunction(data);
                         if (res.length > 0) {
@@ -179,7 +210,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 }
 
                 // Utility function derived from CSS, will make your life much easier
-                const transformedStream = transformSafelySerial(data, {
+                const transformedStream = transformSafelyMultiple(data, {
                     transform(data: Quad): void {
                         if (!store.has(data)) {
                             store.add(data)
