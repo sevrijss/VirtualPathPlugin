@@ -14,7 +14,7 @@ import {
     ResourceIdentifier,
     ResourceStore
 } from "@solid/community-server";
-import {transformSafelySerial} from "./StreamUtils";
+import {transformSafelyMultiple} from "./StreamUtils";
 import {UrlBuilder} from "./PathResolver";
 import {Processor} from "./Processor";
 
@@ -24,18 +24,17 @@ const quadPrefs = {type: {'internal/quads': 1}};
  * Allow containers to have derived resources.
  */
 export class VirtualStore<T extends ResourceStore = ResourceStore> extends PassthroughStore<T> {
-    protected readonly source: T;
-    private readonly converter: RepresentationConverter;
+    //protected readonly source: T;
+    readonly converter: RepresentationConverter;
     private readonly logger = getLoggerFor(this);
-    private readonly urlBuilder;
+    readonly urlBuilder: UrlBuilder;
 
     private virtualIdentifiers = {};
 
-    private dependencies = {};
+    dependencies = {};
 
     public constructor(source: T, converter: RepresentationConverter, urlBuilder: UrlBuilder) {
         super(source);
-        this.source = source;
         this.converter = converter;
         this.urlBuilder = urlBuilder;
     }
@@ -47,10 +46,10 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * @param originals - name of the resources from which something is derived
      * @private
      *
-     * @returns list of resourceIdentifiers for the original resources
+     * @returns - list of resourceIdentifiers for the original resources
      */
     private checkDependencies(name: string, originals: string[]): ResourceIdentifier[] {
-        if (name in this.virtualIdentifiers) {
+        if (this.isVirtual(name)) {
             this.logger.error("duplicate routes in Virtual routers");
             return []
         }
@@ -70,6 +69,83 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     }
 
     /**
+     * Returns a list of identifiers of the resources that depend on the given identifier.
+     * @param name - relative path of the identifier
+     *
+     * @returns - a list of relative paths
+     */
+    public getDependants(name: string): string[] {
+        // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\nname:\t${this.resolve(name)}`);
+        if (name in this.dependencies) {
+            // @ts-ignore
+            return this.dependencies[name];
+        } else return []
+    }
+
+    /**
+     * returns if a given identifier is a derived resource or not
+     * @param name - a relative identifier
+     *
+     * @returns - true if the resource is derived
+     */
+    public isVirtual(name: string): boolean {
+        // console.log(`identifiers:\t${Object.keys(this.virtualIdentifiers).join("\t")}\nname:\t${this.resolve(name)}`);
+        return Object.keys(this.virtualIdentifiers).includes(this.resolve(name));
+    }
+
+    /**
+     * wrapper to resolve urls
+     *
+     * @param name - relative identifier
+     * @private
+     *
+     * @returns - full identifier
+     */
+    private resolve(name: string): string {
+        return this.urlBuilder.resolve(name)
+    }
+
+    /**
+     * Experimental feature - needs work.
+     *
+     * Lets the user provide a function which supplies a Representation.
+     * That representation can come from anywhere (api or local file)
+     * @param name - identifier of the newly created resource
+     * @param getResource - function that generates a Representation
+     * @param processFunction - function to process a representation
+     */
+    public addVirtualRouteRemoteSource(name: string,
+                                       getResource: () => Promise<Representation>,
+                                       processFunction: (arg0: N3.Store) => Quad[]) {
+        name = this.urlBuilder.resolve(name);
+        // Construct a new function to use the original resource and pass on any preferences and/or conditions
+        // @ts-expect-error indexing doesn't work for some reason when using strings
+        this.virtualIdentifiers[name] =
+            async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+                const store = new N3.Store();
+                let data = [(await getResource()).data]
+
+                // Utility function derived from CSS, will make your life much easier
+                const transformedStream = transformSafelyMultiple(data, {
+                    transform(data: Quad): void {
+                        if (!store.has(data)) {
+                            store.add(data)
+                        }
+                    },
+                    flush() {
+                        const result = processFunction(store)
+                        result.forEach(val => {
+                            this.push(val)
+                        });
+                    },
+                    objectMode: true,
+                });
+                const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
+                return await this.converter.handle({representation: out, identifier: {path: name}, preferences: prefs});
+            }
+    }
+
+    /**
      * Create a derived resource for which the processing function works on single Quads.
      *
      * The Quads are supplied in a streaming fashion: one by one.
@@ -85,15 +161,14 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                                  startFunction: undefined | ((arg0: void) => void),
                                  deriveFunction: (arg0: Quad) => Quad[],
                                  endFunction: undefined | ((arg0: void) => Quad[])): void {
-        name = this.urlBuilder.resolve(name);
         const sources = this.checkDependencies(name, originals);
+        name = this.urlBuilder.resolve(name);
         if (sources.length === 0) {
             return;
         }
         // @ts-ignore
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-                this.logger.info(name);
                 let data = []
                 let dupes: N3.Store = new N3.Store()
                 for (const source of sources) {
@@ -104,7 +179,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     startFunction();
                 }
                 // Utility function derived from CSS, will make your life much easier
-                const transformedStream = transformSafelySerial(data, {
+                const transformedStream = transformSafelyMultiple(data, {
                     transform(data: Quad): void {
                         const res = deriveFunction(data);
                         if (res.length > 0) {
@@ -179,7 +254,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 }
 
                 // Utility function derived from CSS, will make your life much easier
-                const transformedStream = transformSafelySerial(data, {
+                const transformedStream = transformSafelyMultiple(data, {
                     transform(data: Quad): void {
                         if (!store.has(data)) {
                             store.add(data)
@@ -209,7 +284,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             this.logger.info(`processing ${identifier.path} as derived document`);
             // @ts-expect-error The object returns an any type,
             // which the compiler can't work with because we need to return a Promise<Representation>
-            return this.virtualIdentifiers[identifier.path](preferences, conditions);
+            return await this.virtualIdentifiers[identifier.path](preferences, conditions);
         }
         return this.source.getRepresentation(identifier, preferences, conditions)
     }
@@ -220,14 +295,11 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             throw new MethodNotAllowedHttpError();
         } else if (identifier.path in this.dependencies) {
             // @ts-ignore
-            console.log(this.dependencies[identifier.path]);
-            // @ts-ignore
             this.dependencies[identifier.path].forEach((s: string) => {
                 deps.push({
                     path: s
                 })
             })
-            console.log(deps);
         }
         return this.source.setRepresentation(identifier, representation, conditions).then(value => {
             deps.forEach(val => {
@@ -240,7 +312,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         })
     }
 
-
+    // todo insert a file to mirror the virtual routes
     addResource(container: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier> {
         return super.addResource(container, representation, conditions);
     }
@@ -253,12 +325,9 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         let altered: ResourceIdentifier[] = []
         if (identifier.path in this.dependencies) {
             // @ts-ignore
-            console.log(this.dependencies[identifier.path]);
-            // @ts-ignore
             for (let p: string of this.dependencies[identifier.path]) {
                 altered.push({path: p})
             }
-            console.log(altered);
         }
         if (identifier.path in this.virtualIdentifiers) {
             const name = identifier.path
@@ -272,8 +341,12 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         } else {
             const result = super.deleteResource(identifier, conditions)
             result.then(
-                (a: ResourceIdentifier[]) => a.forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
-            );
+                (a: ResourceIdentifier[]) => {
+                    this.logger.info(a.length.toString());
+                    a.filter(ident => ident.path !== identifier.path).forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
+                })
+                .catch(err => {
+                });
             return result
         }
     }

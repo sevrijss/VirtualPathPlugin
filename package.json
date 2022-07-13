@@ -1,9 +1,13 @@
 {
   "devDependencies": {
+    "@babel/preset-typescript": "^7.18.6",
     "@tsconfig/node14": "^1.0.1",
     "@types/combined-stream": "^1.0.3",
+    "@types/jest": "^28.1.5",
     "@types/node-fetch": "^2.6.1",
     "componentsjs-generator": "^2.6.0",
+    "jest": "^28.1.2",
+    "ts-jest": "^28.0.5",
     "ts-node": "^9.1.1",
     "typescript": "^4.2.3"
   },
@@ -16,6 +20,7 @@
   "description": "Extension for Community Solid Server to use virtual paths and derived data",
   "dependencies": {
     "@solid/community-server": "^4.0.1",
+    "arrayify-stream": "^2.0.0",
     "combined-stream": "^1.0.8",
     "node-fetch": "^2.6.1"
   },
@@ -25,7 +30,8 @@
     "start": "community-solid-server -c file-search.json -f ./local-files -m .",
     "build": "npm run build:ts && npm run build:components",
     "build:components": "componentsjs-generator -s src -c dist/components -i .componentsignore -r virtualStore --typeScopedContexts",
-    "build:ts": "tsc"
+    "build:ts": "tsc",
+    "test": "jest"
   },
   "keywords": [
     "solid"
