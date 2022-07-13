@@ -49,6 +49,7 @@ export class PathBuilder {
         this.virtualStore = vStore;
         const age = new Age()
         this.virtualStore.addVirtualRouteStream('/age', ['/card.ttl'], age.start, age.process, age.onClose);
+        this.virtualStore.addVirtualRouteStream('/age3', ['/doesntExist.ttl'], age.start, age.process, age.onClose);
         this.virtualStore.addVirtualRouteStreamProcessor('/age2', ['/card.ttl'], age);
         this.virtualStore.addVirtualRouteStream('/ageAndKnows', ["/knows.ttl", '/card.ttl'], undefined, this.composite, () => []);
         this.virtualStore.addVirtualRoute('/ageAndKnows2', ["/knows.ttl", '/card.ttl'], this.composite2);

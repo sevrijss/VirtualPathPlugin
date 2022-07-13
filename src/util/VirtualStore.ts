@@ -24,18 +24,17 @@ const quadPrefs = {type: {'internal/quads': 1}};
  * Allow containers to have derived resources.
  */
 export class VirtualStore<T extends ResourceStore = ResourceStore> extends PassthroughStore<T> {
-    protected readonly source: T;
+    //protected readonly source: T;
     readonly converter: RepresentationConverter;
     private readonly logger = getLoggerFor(this);
-    readonly urlBuilder : UrlBuilder;
+    readonly urlBuilder: UrlBuilder;
 
     private virtualIdentifiers = {};
 
-    private dependencies = {};
+    dependencies = {};
 
     public constructor(source: T, converter: RepresentationConverter, urlBuilder: UrlBuilder) {
         super(source);
-        this.source = source;
         this.converter = converter;
         this.urlBuilder = urlBuilder;
     }
@@ -50,7 +49,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * @returns list of resourceIdentifiers for the original resources
      */
     private checkDependencies(name: string, originals: string[]): ResourceIdentifier[] {
-        if (name in this.virtualIdentifiers) {
+        if (this.isVirtual(name)) {
             this.logger.error("duplicate routes in Virtual routers");
             return []
         }
@@ -69,9 +68,35 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         return sources;
     }
 
+    public getDependants(name: string): string[] {
+        // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\nname:\t${this.resolve(name)}`);
+        if (name in this.dependencies) {
+            // @ts-ignore
+            return this.dependencies[name];
+        } else return []
+    }
+
+    public isVirtual(name: string): boolean {
+        // console.log(`identifiers:\t${Object.keys(this.virtualIdentifiers).join("\t")}\nname:\t${this.resolve(name)}`);
+        return Object.keys(this.virtualIdentifiers).includes(this.resolve(name));
+    }
+
+    public resolve(name: string): string {
+        return this.urlBuilder.resolve(name)
+    }
+
+    /**
+     * Experimental feature - needs work.
+     *
+     * Let's the user provide a function which supplies a Representation.
+     * That representation can come from anywhere (api or local file)
+     * @param name
+     * @param getResource
+     * @param processFunction
+     */
     public addVirtualRouteRemoteSource(name: string,
                                        getResource: () => Promise<Representation>,
-                                       processFunction: (arg0: N3.Store) => Quad[]){
+                                       processFunction: (arg0: N3.Store) => Quad[]) {
         name = this.urlBuilder.resolve(name);
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
         // @ts-expect-error indexing doesn't work for some reason when using strings
@@ -116,8 +141,8 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                                  startFunction: undefined | ((arg0: void) => void),
                                  deriveFunction: (arg0: Quad) => Quad[],
                                  endFunction: undefined | ((arg0: void) => Quad[])): void {
-        name = this.urlBuilder.resolve(name);
         const sources = this.checkDependencies(name, originals);
+        name = this.urlBuilder.resolve(name);
         if (sources.length === 0) {
             return;
         }
@@ -271,7 +296,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         })
     }
 
-
+    // todo kijk voor fake doc zodat het in de index komt.
     addResource(container: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier> {
         return super.addResource(container, representation, conditions);
     }
@@ -303,8 +328,12 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         } else {
             const result = super.deleteResource(identifier, conditions)
             result.then(
-                (a: ResourceIdentifier[]) => a.forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
-            );
+                (a: ResourceIdentifier[]) => {
+                    this.logger.info(a.length.toString());
+                    a.filter(ident => ident.path !== identifier.path).forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
+                })
+                .catch(err => {
+                });
             return result
         }
     }
