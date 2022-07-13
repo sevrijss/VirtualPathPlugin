@@ -149,7 +149,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         // @ts-ignore
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-                this.logger.info(name);
+                console.log(name);
                 let data = []
                 let dupes: N3.Store = new N3.Store()
                 for (const source of sources) {
@@ -157,6 +157,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     data.push(input.data)
                 }
                 if (startFunction) {
+                    console.log("calling startfunction");
                     startFunction();
                 }
                 // Utility function derived from CSS, will make your life much easier
@@ -174,6 +175,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     },
                     flush(): void {
                         if (endFunction) {
+                            console.log("calling end function");
                             const result = endFunction();
                             if (result.length !== 0) {
                                 result.forEach(r => {
@@ -263,9 +265,10 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     ): Promise<Representation> {
         if (identifier.path in this.virtualIdentifiers) {
             this.logger.info(`processing ${identifier.path} as derived document`);
+            console.log(identifier.path);
             // @ts-expect-error The object returns an any type,
             // which the compiler can't work with because we need to return a Promise<Representation>
-            return this.virtualIdentifiers[identifier.path](preferences, conditions);
+            return await this.virtualIdentifiers[identifier.path](preferences, conditions);
         }
         return this.source.getRepresentation(identifier, preferences, conditions)
     }

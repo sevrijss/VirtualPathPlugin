@@ -1,14 +1,20 @@
 import {VirtualStore} from '../../src/util/VirtualStore';
 import {
+    BasicRepresentation,
     Conditions,
     Patch,
     Representation,
     RepresentationConverter,
+    RepresentationConverterArgs,
     RepresentationPreferences,
     ResourceStore
 } from "@solid/community-server";
 import {UrlBuilder} from "../../src/util/PathResolver";
+import N3, {DataFactory} from 'n3'
+import {Quad} from "rdf-js";
+import arrayifyStream from "arrayify-stream";
 
+const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
 const quadPrefs = {type: {'internal/quads': 1}};
 
@@ -16,10 +22,20 @@ describe('A VirtualStore', (): void => {
     let store: VirtualStore
     let source: ResourceStore
 
+    let baseRep: Representation
+    let baseData: Quad[];
+
+    const q = quad(
+        namedNode("http://localhost:3000/seppevr"),
+        namedNode("http://dbpedia.org/ontology/age"),
+        literal(20),
+        defaultGraph()
+    )
+
     beforeEach(async (): Promise<void> => {
         // basic ResourceStore
         source = {
-            getRepresentation: jest.fn(async (): Promise<any> => 'get'),
+            getRepresentation: jest.fn().mockResolvedValue(baseRep),
             addResource: jest.fn(async (): Promise<any> => 'add'),
             setRepresentation: jest.fn(async (): Promise<any> => 'set'),
             deleteResource: jest.fn(async (): Promise<any> => 'delete'),
@@ -28,11 +44,20 @@ describe('A VirtualStore', (): void => {
         };
 
         // converter & url builder
-        const converter: RepresentationConverter = {handleSafe: jest.fn().mockResolvedValue({out: true})} as any;
-        const urlbuilder: UrlBuilder = {resolve: jest.fn((name:string):string => `http://localhost:3000${name}`)} as any;
+        const converter: RepresentationConverter = {
+            handleSafe: jest.fn().mockResolvedValue({out: true}),
+            handle: (i: RepresentationConverterArgs) => i.representation
+        } as any;
+        const urlbuilder: UrlBuilder = {resolve: jest.fn((name: string): string => `http://localhost:3000${name}`)} as any;
 
         // VirtualStore
         store = new VirtualStore(source, converter, urlbuilder)
+
+        baseRep = new BasicRepresentation([], {
+            contentType: 'internal/quads'
+        })
+        baseRep.data.push(q)
+        baseData = [q]
 
 
     })
@@ -49,66 +74,92 @@ describe('A VirtualStore', (): void => {
         expect(store.getDependants("/base")).toStrictEqual(["/derivedResource"])
     })
 
-    it("calls getRepresentation from the source with the base url if the resource is derived", async (): Promise<void> => {
+    it("[streamVirtualRoute]\tcalls getRepresentation from the source with the base url if the resource is derived", async (): Promise<void> => {
+        const start = jest.fn()
+        const deriveFunction = jest.fn((q: Quad) => [q])
+        const endFunction = jest.fn(() => []);
         // route for testing
         store.addVirtualRouteStream("/derivedResource",
             ["/base"],
-            () => {
-            },
-            (q) => [q],
-            () => [])
+            start,
+            deriveFunction,
+            endFunction)
+        const representation = await store.getRepresentation(
+            {path: 'http://localhost:3000/derivedResource'},
+            {}
+        )
+        // await expect(representation.data).toBe(baseRep.data)
+        const data: Quad[] = await arrayifyStream(representation.data)
+        expect(data).toStrictEqual(baseData)
+        expect(start).toHaveBeenCalledTimes(1);
+        expect(deriveFunction).toHaveBeenCalledTimes(data.length);
+        expect(endFunction).toHaveBeenCalledTimes(1);
+        expect(source.getRepresentation).toHaveBeenCalledTimes(1);
+        expect(source.getRepresentation).toHaveBeenCalledWith({path: 'http://localhost:3000/base'}, quadPrefs, undefined);
+    });
+
+    it("[virtualRoute]\tcalls getRepresentation from the source with the base url if the resource is derived", async (): Promise<void> => {
+        const deriveFunction = jest.fn((store: N3.Store) => store.getQuads(null, null, null, defaultGraph()))
+        // route for testing
+        store.addVirtualRoute("/derivedResource",
+            ["/base"],
+            deriveFunction
+        )
         // this will reject, since the "/base" resource does not exist
-        await expect(store.getRepresentation(
+        const representation = await store.getRepresentation(
             {path: 'http://localhost:3000/derivedResource'},
             {} as RepresentationPreferences,
             {} as Conditions)
-        ).rejects
+        const data = await arrayifyStream(representation.data);
+        expect(data).toStrictEqual(baseData)
+        expect(deriveFunction).toHaveBeenCalledTimes(1);
         expect(source.getRepresentation).toHaveBeenCalledTimes(1);
         expect(source.getRepresentation).toHaveBeenCalledWith({path: 'http://localhost:3000/base'}, quadPrefs, undefined);
     });
 
     it("calls getRepresentation directly from the source if it is not a derive resource", async (): Promise<void> => {
-        await expect(store.getRepresentation(
-            {path: 'notADerivedResource'},
+        const rep = await store.getRepresentation(
+            {path: 'http://localhost:3000/notADerivedResource'},
             {} as RepresentationPreferences,
             {} as Conditions)
-        ).resolves.toBe("get");
+        const d = await arrayifyStream(rep.data);
+        expect(d).toStrictEqual(baseData)
         expect(source.getRepresentation).toHaveBeenCalledTimes(1);
-        expect(source.getRepresentation).toHaveBeenLastCalledWith({path: 'notADerivedResource'}, {}, {});
+        expect(source.getRepresentation).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {}, {});
     });
 
     it("calls addResource directly from the source if it is not a derive resource", async (): Promise<void> => {
-        await expect(store.addResource({path: 'notADerivedResource'},
+        await expect(store.addResource({path: 'http://localhost:3000/notADerivedResource'},
             {} as Representation,
             {} as Conditions)).resolves.toBe("add");
         expect(source.addResource).toHaveBeenCalledTimes(1);
-        expect(source.addResource).toHaveBeenLastCalledWith({path: 'notADerivedResource'}, {}, {});
+        expect(source.addResource).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {}, {});
     });
 
     it("calls setRepresentation directly from the source if it is not a derive resource", async (): Promise<void> => {
-        await expect(store.setRepresentation({path: 'notADerivedResource'},
+        await expect(store.setRepresentation({path: 'http://localhost:3000/notADerivedResource'},
             {} as Representation,
             {} as Conditions)).resolves.toBe("set");
         expect(source.setRepresentation).toHaveBeenCalledTimes(1);
-        expect(source.setRepresentation).toHaveBeenLastCalledWith({path: 'notADerivedResource'}, {}, {});
+        expect(source.setRepresentation).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {}, {});
     });
 
     it("calls deleteResource directly from the source if it is not a derive resource", async (): Promise<void> => {
-        await expect(store.deleteResource({path: 'notADerivedResource'}, {} as Conditions)).resolves.toBe("delete");
+        await expect(store.deleteResource({path: 'http://localhost:3000/notADerivedResource'}, {} as Conditions)).resolves.toBe("delete");
         expect(source.deleteResource).toHaveBeenCalledTimes(1);
-        expect(source.deleteResource).toHaveBeenLastCalledWith({path: 'notADerivedResource'}, {});
+        expect(source.deleteResource).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {});
     });
 
     it("calls modifyResource directly from the source if it is not a derive resource", async (): Promise<void> => {
-        await expect(store.modifyResource({path: 'notADerivedResource'}, {} as Patch)).resolves.toBe("modify");
+        await expect(store.modifyResource({path: 'http://localhost:3000/notADerivedResource'}, {} as Patch)).resolves.toBe("modify");
         expect(source.modifyResource).toHaveBeenCalledTimes(1);
-        expect(source.modifyResource).toHaveBeenLastCalledWith({path: 'notADerivedResource'}, {}, undefined);
+        expect(source.modifyResource).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {}, undefined);
     });
 
     it("calls hasResource directly from the source if it is not a derive resource", async (): Promise<void> => {
-        await expect(store.hasResource({path: 'notADerivedResource'})).resolves.toBe("exists");
+        await expect(store.hasResource({path: 'http://localhost:3000/notADerivedResource'})).resolves.toBe("exists");
         expect(source.hasResource).toHaveBeenCalledTimes(1);
-        expect(source.hasResource).toHaveBeenLastCalledWith({path: 'notADerivedResource'});
+        expect(source.hasResource).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'});
     });
 
 })
