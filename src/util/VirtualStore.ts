@@ -46,7 +46,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * @param originals - name of the resources from which something is derived
      * @private
      *
-     * @returns list of resourceIdentifiers for the original resources
+     * @returns - list of resourceIdentifiers for the original resources
      */
     private checkDependencies(name: string, originals: string[]): ResourceIdentifier[] {
         if (this.isVirtual(name)) {
@@ -68,6 +68,12 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         return sources;
     }
 
+    /**
+     * Returns a list of identifiers of the resources that depend on the given identifier.
+     * @param name - relative path of the identifier
+     *
+     * @returns - a list of relative paths
+     */
     public getDependants(name: string): string[] {
         // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\nname:\t${this.resolve(name)}`);
         if (name in this.dependencies) {
@@ -76,23 +82,37 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         } else return []
     }
 
+    /**
+     * returns if a given identifier is a derived resource or not
+     * @param name - a relative identifier
+     *
+     * @returns - true if the resource is derived
+     */
     public isVirtual(name: string): boolean {
         // console.log(`identifiers:\t${Object.keys(this.virtualIdentifiers).join("\t")}\nname:\t${this.resolve(name)}`);
         return Object.keys(this.virtualIdentifiers).includes(this.resolve(name));
     }
 
-    public resolve(name: string): string {
+    /**
+     * wrapper to resolve urls
+     *
+     * @param name - relative identifier
+     * @private
+     *
+     * @returns - full identifier
+     */
+    private resolve(name: string): string {
         return this.urlBuilder.resolve(name)
     }
 
     /**
      * Experimental feature - needs work.
      *
-     * Let's the user provide a function which supplies a Representation.
+     * Lets the user provide a function which supplies a Representation.
      * That representation can come from anywhere (api or local file)
-     * @param name
-     * @param getResource
-     * @param processFunction
+     * @param name - identifier of the newly created resource
+     * @param getResource - function that generates a Representation
+     * @param processFunction - function to process a representation
      */
     public addVirtualRouteRemoteSource(name: string,
                                        getResource: () => Promise<Representation>,
@@ -149,7 +169,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         // @ts-ignore
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-                console.log(name);
                 let data = []
                 let dupes: N3.Store = new N3.Store()
                 for (const source of sources) {
@@ -157,7 +176,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     data.push(input.data)
                 }
                 if (startFunction) {
-                    console.log("calling startfunction");
                     startFunction();
                 }
                 // Utility function derived from CSS, will make your life much easier
@@ -175,7 +193,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     },
                     flush(): void {
                         if (endFunction) {
-                            console.log("calling end function");
                             const result = endFunction();
                             if (result.length !== 0) {
                                 result.forEach(r => {
@@ -265,7 +282,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     ): Promise<Representation> {
         if (identifier.path in this.virtualIdentifiers) {
             this.logger.info(`processing ${identifier.path} as derived document`);
-            console.log(identifier.path);
             // @ts-expect-error The object returns an any type,
             // which the compiler can't work with because we need to return a Promise<Representation>
             return await this.virtualIdentifiers[identifier.path](preferences, conditions);
@@ -279,14 +295,11 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             throw new MethodNotAllowedHttpError();
         } else if (identifier.path in this.dependencies) {
             // @ts-ignore
-            console.log(this.dependencies[identifier.path]);
-            // @ts-ignore
             this.dependencies[identifier.path].forEach((s: string) => {
                 deps.push({
                     path: s
                 })
             })
-            console.log(deps);
         }
         return this.source.setRepresentation(identifier, representation, conditions).then(value => {
             deps.forEach(val => {
@@ -299,7 +312,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         })
     }
 
-    // todo kijk voor fake doc zodat het in de index komt.
+    // todo insert a file to mirror the virtual routes
     addResource(container: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier> {
         return super.addResource(container, representation, conditions);
     }
@@ -312,12 +325,9 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         let altered: ResourceIdentifier[] = []
         if (identifier.path in this.dependencies) {
             // @ts-ignore
-            console.log(this.dependencies[identifier.path]);
-            // @ts-ignore
             for (let p: string of this.dependencies[identifier.path]) {
                 altered.push({path: p})
             }
-            console.log(altered);
         }
         if (identifier.path in this.virtualIdentifiers) {
             const name = identifier.path
