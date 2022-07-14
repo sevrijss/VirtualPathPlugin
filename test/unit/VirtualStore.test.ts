@@ -2,11 +2,13 @@ import {VirtualStore} from '../../src/util/VirtualStore';
 import {
     BasicRepresentation,
     Conditions,
+    MethodNotAllowedHttpError,
     Patch,
     Representation,
     RepresentationConverter,
     RepresentationConverterArgs,
     RepresentationPreferences,
+    ResourceIdentifier,
     ResourceStore
 } from "@solid/community-server";
 import {UrlBuilder} from "../../src/util/PathResolver";
@@ -38,7 +40,7 @@ describe('A VirtualStore', (): void => {
             getRepresentation: jest.fn().mockResolvedValue(baseRep),
             addResource: jest.fn(async (): Promise<any> => 'add'),
             setRepresentation: jest.fn(async (): Promise<any> => 'set'),
-            deleteResource: jest.fn(async (): Promise<any> => 'delete'),
+            deleteResource: jest.fn(async (identifier: ResourceIdentifier): Promise<any> => [identifier]),
             modifyResource: jest.fn(async (): Promise<any> => 'modify'),
             hasResource: jest.fn(async (): Promise<any> => 'exists'),
         };
@@ -71,7 +73,7 @@ describe('A VirtualStore', (): void => {
             (q) => [q],
             () => [])
         expect(store.isVirtual("/derivedResource")).toBeTruthy();
-        expect(store.getDependants("/base")).toStrictEqual(["/derivedResource"])
+        expect(store.getDependants("/base")).toStrictEqual(["http://localhost:3000/derivedResource"])
     })
 
     it("[streamVirtualRoute]\tcalls getRepresentation from the source with the base url if the resource is derived", async (): Promise<void> => {
@@ -128,12 +130,25 @@ describe('A VirtualStore', (): void => {
         expect(source.getRepresentation).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {}, {});
     });
 
+
     it("calls addResource directly from the source if it is not a derive resource", async (): Promise<void> => {
         await expect(store.addResource({path: 'http://localhost:3000/notADerivedResource'},
             {} as Representation,
             {} as Conditions)).resolves.toBe("add");
         expect(source.addResource).toHaveBeenCalledTimes(1);
         expect(source.addResource).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {}, {});
+    });
+
+    it("should error when trying to set a representation for a derived resource", async (): Promise<void> => {
+        const deriveFunction = jest.fn((store: N3.Store) => store.getQuads(null, null, null, defaultGraph()))
+        // route for testing
+        store.addVirtualRoute("/derivedResource",
+            ["/base"],
+            deriveFunction
+        )
+        const result = () => store.setRepresentation({path: "http://localhost:3000/derivedResource"}, {data: 'test'} as any)
+        expect(result).toThrow(MethodNotAllowedHttpError)
+        expect(result).toThrow("setRepresentation are not allowed.")
     });
 
     it("calls setRepresentation directly from the source if it is not a derive resource", async (): Promise<void> => {
@@ -144,10 +159,38 @@ describe('A VirtualStore', (): void => {
         expect(source.setRepresentation).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {}, {});
     });
 
+
     it("calls deleteResource directly from the source if it is not a derive resource", async (): Promise<void> => {
-        await expect(store.deleteResource({path: 'http://localhost:3000/notADerivedResource'}, {} as Conditions)).resolves.toBe("delete");
+        await expect(store.deleteResource({path: 'http://localhost:3000/notADerivedResource'}, {} as Conditions)).resolves.toStrictEqual([{path: "http://localhost:3000/notADerivedResource"}]);
         expect(source.deleteResource).toHaveBeenCalledTimes(1);
         expect(source.deleteResource).toHaveBeenLastCalledWith({path: 'http://localhost:3000/notADerivedResource'}, {});
+    });
+
+    it("calling deleteResource on a derived resouce should result that resource not being virtual", async (): Promise<void> => {
+        const deriveFunction = jest.fn((store: N3.Store) => store.getQuads(null, null, null, defaultGraph()))
+        // route for testing
+        store.addVirtualRoute("/derivedResource",
+            ["/base"],
+            deriveFunction
+        )
+        const result = await store.deleteResource({path: "http://localhost:3000/derivedResource"})
+        expect(result).toStrictEqual([{path: "http://localhost:3000/derivedResource"}])
+        expect(store.isVirtual("/derivedResource")).toBeFalsy()
+    });
+
+    it("calling deleteResource on the base resource should result in the derived resource not being virtual", async (): Promise<void> => {
+        const deriveFunction = jest.fn((store: N3.Store) => store.getQuads(null, null, null, defaultGraph()))
+        // route for testing
+        store.addVirtualRoute("/derivedResource",
+            ["/base"],
+            deriveFunction
+        )
+        const result = await store.deleteResource({path: "http://localhost:3000/base"})
+        expect(result).toStrictEqual([
+            {path: "http://localhost:3000/base"},
+            {path: "http://localhost:3000/derivedResource"}
+        ])
+        expect(store.isVirtual("/derivedResource")).toBeFalsy()
     });
 
     it("calls modifyResource directly from the source if it is not a derive resource", async (): Promise<void> => {
