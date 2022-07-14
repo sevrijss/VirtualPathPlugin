@@ -133,7 +133,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 // Utility function derived from CSS, will make your life much easier
                 const transformedStream = transformSafelyMultiple(data, {
                     transform(data: Quad): void {
-                        console.log(data);
                         if (!store.has(data)) {
                             store.add(data)
                         }
@@ -334,7 +333,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             for (let p: string of this.dependencies[identifier.path]) {
                 altered.push({path: p})
             }
-            console.log(altered)
         }
         if (identifier.path in this.virtualIdentifiers) {
             const name = identifier.path

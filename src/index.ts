@@ -64,7 +64,6 @@ export class PathBuilder {
     private readonly logger = getLoggerFor("pathBuilder");
 
     async getWeather(jsonObject: object): Promise<Quad[]> {
-        console.log(jsonObject)
         const responseID = namedNode(this.virtualStore.resolve(`weather_${Date.now()}`))
         const weatherReportID = namedNode(this.virtualStore.resolve(`weather_${Date.now()}_weatherProp`))
 
