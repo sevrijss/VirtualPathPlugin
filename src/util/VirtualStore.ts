@@ -4,6 +4,7 @@ import {
     BasicRepresentation,
     Conditions,
     getLoggerFor,
+    guardedStreamFrom,
     INTERNAL_QUADS,
     MethodNotAllowedHttpError,
     PassthroughStore,
@@ -17,6 +18,7 @@ import {
 import {transformSafelyMultiple} from "./StreamUtils";
 import {UrlBuilder} from "./PathResolver";
 import {Processor} from "./Processor";
+import fetch from "node-fetch";
 
 const quadPrefs = {type: {'internal/quads': 1}};
 
@@ -97,11 +99,10 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * wrapper to resolve urls
      *
      * @param name - relative identifier
-     * @private
      *
      * @returns - full identifier
      */
-    private resolve(name: string): string {
+    public resolve(name: string): string {
         return this.urlBuilder.resolve(name)
     }
 
@@ -111,11 +112,13 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * Lets the user provide a function which supplies a Representation.
      * That representation can come from anywhere (api or local file)
      * @param name - identifier of the newly created resource
-     * @param getResource - function that generates a Representation
+     * @param original - remote resource
+     * @param jsonToQuads - function to map json to quads
      * @param processFunction - function to process a representation
      */
     public addVirtualRouteRemoteSource(name: string,
-                                       getResource: () => Promise<Representation>,
+                                       original: string,
+                                       jsonToQuads: (arg0: object) => Promise<Quad[]>,
                                        processFunction: (arg0: N3.Store) => Quad[]) {
         name = this.urlBuilder.resolve(name);
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
@@ -123,11 +126,14 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
                 const store = new N3.Store();
-                let data = [(await getResource()).data]
+                const result = await fetch(original);
+                let jsonData = await result.json();
+                let data = [guardedStreamFrom(await jsonToQuads(jsonData))]
 
                 // Utility function derived from CSS, will make your life much easier
                 const transformedStream = transformSafelyMultiple(data, {
                     transform(data: Quad): void {
+                        console.log(data);
                         if (!store.has(data)) {
                             store.add(data)
                         }

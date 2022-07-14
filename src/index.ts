@@ -4,8 +4,7 @@ import N3, {DataFactory, NamedNode} from "n3";
 import {Processor} from "./util/Processor";
 
 import {key} from "./config";
-import fetch from "node-fetch";
-import {BasicRepresentation, getLoggerFor, Representation} from "@solid/community-server";
+import {getLoggerFor} from "@solid/community-server";
 
 const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
@@ -55,27 +54,87 @@ export class PathBuilder {
         this.virtualStore.addVirtualRoute('/ageAndKnows2', ["/knows.ttl", '/card.ttl'], this.composite2);
         this.virtualStore.addVirtualRouteStream('/birthYear', ['/age'], undefined, this.getBirthYear, () => []);
         this.virtualStore.addVirtualRouteStream('/friends', ['/knows.ttl'], undefined, this.getFriends, () => []);
-        this.virtualStore.addVirtualRouteRemoteSource('/weather', () => this.getWeather(), (q) => q.getQuads(null, null, null, defaultGraph()))
+        this.virtualStore.addVirtualRouteRemoteSource(
+            '/weather',
+            `https://api.openweathermap.org/data/2.5/weather?lat=35&lon=139&appid=${key}`,
+            (data) => this.getWeather(data),
+            (q) => q.getQuads(null, null, null, defaultGraph()))
     }
 
     private readonly logger = getLoggerFor("pathBuilder");
 
-    async getWeather(): Promise<Representation> {
-        const dest = `https://api.openweathermap.org/data/2.5/weather?lat=35&lon=139&appid=${key}`
-        const result = await fetch(dest);
-        let out = await result.json();
-        out = {"weatherResponse": out}
-        out["@context"] = "https://schema.org";
-        out["@id"] = Date.now().toString();
-        return await this.virtualStore.converter.handle({
-            representation: new BasicRepresentation(
-                JSON.stringify(out)
-                    .replace(RegExp("id", "g"), "weatherId")
-                    .replace(RegExp("type", "g"), "weatherType"),
-                "application/ld+json"),
-            identifier: {path: this.virtualStore.urlBuilder.resolve("WeatherCall")},
-            preferences: quadPrefs
-        })
+    async getWeather(jsonObject: object): Promise<Quad[]> {
+        console.log(jsonObject)
+        const responseID = namedNode(this.virtualStore.resolve(`weather_${Date.now()}`))
+        const weatherReportID = namedNode(this.virtualStore.resolve(`weather_${Date.now()}_weatherProp`))
+
+        const outputArray: Quad[] = []
+
+        outputArray.push(quad(
+            responseID,
+            namedNode("https://bimerr.iot.linkeddata.es/def/weather#WeatherProperty"),
+            weatherReportID,
+            defaultGraph()
+        ))
+
+        outputArray.push(quad(
+            weatherReportID,
+            namedNode("http://rs.tdwg.org/dwc/terms/decimalLatitude"),
+            // @ts-ignore
+            literal(jsonObject.coord.lat),
+            defaultGraph()
+        ))
+
+        outputArray.push(quad(
+            weatherReportID,
+            namedNode("http://rs.tdwg.org/dwc/terms/decimalLongitude"),
+            // @ts-ignore
+            literal(jsonObject.coord.lon),
+            defaultGraph()
+        ))
+
+        outputArray.push(quad(
+            weatherReportID,
+            namedNode("https://bimerr.iot.linkeddata.es/def/weather#Temperature"),
+            // @ts-ignore
+            literal(jsonObject.main.temp),
+            defaultGraph()
+        ))
+
+        outputArray.push(quad(
+            weatherReportID,
+            namedNode("https://bimerr.iot.linkeddata.es/def/weather#Pressure"),
+            // @ts-ignore
+            literal(jsonObject.main.pressure),
+            defaultGraph()
+        ))
+
+        outputArray.push(quad(
+            weatherReportID,
+            namedNode("https://bimerr.iot.linkeddata.es/def/weather#Humidity"),
+            // @ts-ignore
+            literal(jsonObject.main.humidity),
+            defaultGraph()
+        ))
+
+        outputArray.push(quad(
+            weatherReportID,
+            namedNode("https://bimerr.iot.linkeddata.es/def/weather#wind_deg"),
+            // @ts-ignore
+            literal(jsonObject.main.pressure),
+            defaultGraph()
+        ))
+
+        outputArray.push(quad(
+            weatherReportID,
+            namedNode("https://bimerr.iot.linkeddata.es/def/weather#WindSpeed"),
+            // @ts-ignore
+            literal(jsonObject.main.humidity),
+            defaultGraph()
+        ))
+
+
+        return outputArray;
     }
 
     private getAge = (data: Quad): Quad[] => {
