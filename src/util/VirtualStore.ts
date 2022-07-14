@@ -56,13 +56,13 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         const sources: ResourceIdentifier[] = originals.map((val: string) => {
             return {path: this.urlBuilder.resolve(val)}
         })
-        originals.forEach((source: string) => {
-            if (source in this.dependencies) {
+        sources.forEach((source: ResourceIdentifier) => {
+            if (source.path in this.dependencies) {
                 // @ts-ignore
-                this.dependencies[source].push(name)
+                this.dependencies[source.path].push(this.resolve(name))
             } else {
                 // @ts-ignore
-                this.dependencies[source] = [name]
+                this.dependencies[source.path] = [this.resolve(name)]
             }
         })
         return sources;
@@ -76,9 +76,9 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      */
     public getDependants(name: string): string[] {
         // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\nname:\t${this.resolve(name)}`);
-        if (name in this.dependencies) {
+        if (this.resolve(name) in this.dependencies) {
             // @ts-ignore
-            return this.dependencies[name];
+            return this.dependencies[this.resolve(name)];
         } else return []
     }
 
@@ -237,8 +237,8 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     public addVirtualRoute(name: string,
                            originals: string[],
                            deriveFunction: (arg0: N3.Store) => Quad[]): void {
-        name = this.urlBuilder.resolve(name);
         const sources = this.checkDependencies(name, originals);
+        name = this.urlBuilder.resolve(name);
         if (sources.length === 0) {
             return;
         }
@@ -292,7 +292,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     setRepresentation(identifier: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier[]> {
         let deps: ResourceIdentifier[] = []
         if (identifier.path in this.virtualIdentifiers) {
-            throw new MethodNotAllowedHttpError();
+            throw new MethodNotAllowedHttpError(["setRepresentation"]);
         } else if (identifier.path in this.dependencies) {
             // @ts-ignore
             this.dependencies[identifier.path].forEach((s: string) => {
@@ -328,25 +328,25 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             for (let p: string of this.dependencies[identifier.path]) {
                 altered.push({path: p})
             }
+            console.log(altered)
         }
         if (identifier.path in this.virtualIdentifiers) {
             const name = identifier.path
             // @ts-ignore problems with string indexing
             delete this.virtualIdentifiers[name]
-
+            altered.push(identifier);
             altered.forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
             return new Promise((resolve, reject) => {
                 resolve(altered);
             })
         } else {
-            const result = super.deleteResource(identifier, conditions)
-            result.then(
-                (a: ResourceIdentifier[]) => {
-                    this.logger.info(a.length.toString());
-                    a.filter(ident => ident.path !== identifier.path).forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
-                })
-                .catch(err => {
-                });
+            const result = await super.deleteResource(identifier, conditions)
+            this.logger.info(result.length.toString());
+            //result.filter(ident => ident.path !== identifier.path).forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
+            altered.forEach(val => {
+                this.deleteResource(val);
+                result.push(val)
+            })
             return result
         }
     }
