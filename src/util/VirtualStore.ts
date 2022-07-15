@@ -22,11 +22,6 @@ import fetch from "node-fetch";
 
 const quadPrefs = {type: {INTERNAL_QUADS: 1}};
 
-
-interface StringByStringList {
-    [key: string]: string[];
-}
-
 /**
  * Allow containers to have derived resources.
  */

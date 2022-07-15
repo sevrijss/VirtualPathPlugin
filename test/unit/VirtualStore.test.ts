@@ -1,4 +1,4 @@
-import {VirtualStore} from '../../src/util/VirtualStore';
+import {UrlBuilder, VirtualStore} from '../../src';
 import {
     BasicRepresentation,
     Conditions,
@@ -12,7 +12,6 @@ import {
     ResourceIdentifier,
     ResourceStore
 } from "@solid/community-server";
-import {UrlBuilder} from "../../src/util/PathResolver";
 import N3, {DataFactory} from 'n3'
 import {Quad} from "rdf-js";
 import arrayifyStream from "arrayify-stream";
@@ -51,10 +50,10 @@ describe('A VirtualStore', (): void => {
             handleSafe: jest.fn().mockResolvedValue({out: true}),
             handle: (i: RepresentationConverterArgs) => i.representation
         } as any;
-        const urlbuilder: UrlBuilder = {resolve: jest.fn((name: string): string => `http://localhost:3000${name}`)} as any;
+        const urlBuilder: UrlBuilder = {resolve: jest.fn((name: string): string => `http://localhost:3000${name}`)} as any;
 
         // VirtualStore
-        store = new VirtualStore(source, converter, urlbuilder)
+        store = new VirtualStore(source, converter, urlBuilder)
 
         baseRep = new BasicRepresentation([], {
             contentType: INTERNAL_QUADS

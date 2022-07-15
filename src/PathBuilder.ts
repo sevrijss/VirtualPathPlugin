@@ -4,6 +4,7 @@ import {getLoggerFor} from "@solid/community-server";
 import {Quad} from "rdf-js";
 import N3, {DataFactory, NamedNode} from "n3";
 import {Age} from "./example/Age"
+import {BIMERR, DBP, FOAF, RS_TDWG} from "./util/Vocabulary";
 
 const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
@@ -40,49 +41,49 @@ export class PathBuilder {
 
         outputArray.push(quad(
             responseID,
-            namedNode("https://bimerr.iot.linkeddata.es/def/weather#WeatherProperty"),
+            namedNode(BIMERR.WeatherProperty),
             weatherReportID
         ))
 
         outputArray.push(quad(
             weatherReportID,
-            namedNode("http://rs.tdwg.org/dwc/terms/decimalLatitude"),
+            namedNode(RS_TDWG.decimalLatitude),
             literal(jsonObject.coord.lat)
         ))
 
         outputArray.push(quad(
             weatherReportID,
-            namedNode("http://rs.tdwg.org/dwc/terms/decimalLongitude"),
+            namedNode(RS_TDWG.decimalLongitude),
             literal(jsonObject.coord.lon)
         ))
 
         outputArray.push(quad(
             weatherReportID,
-            namedNode("https://bimerr.iot.linkeddata.es/def/weather#Temperature"),
+            namedNode(BIMERR.Temperature),
             literal(jsonObject.main.temp)
         ))
 
         outputArray.push(quad(
             weatherReportID,
-            namedNode("https://bimerr.iot.linkeddata.es/def/weather#Pressure"),
+            namedNode(BIMERR.Pressure),
             literal(jsonObject.main.pressure)
         ))
 
         outputArray.push(quad(
             weatherReportID,
-            namedNode("https://bimerr.iot.linkeddata.es/def/weather#Humidity"),
+            namedNode(BIMERR.Humidity),
             literal(jsonObject.main.humidity)
         ))
 
         outputArray.push(quad(
             weatherReportID,
-            namedNode("https://bimerr.iot.linkeddata.es/def/weather#wind_deg"),
+            namedNode(BIMERR.wind_deg),
             literal(jsonObject.main.pressure)
         ))
 
         outputArray.push(quad(
             weatherReportID,
-            namedNode("https://bimerr.iot.linkeddata.es/def/weather#WindSpeed"),
+            namedNode(BIMERR.windSpeed),
             literal(jsonObject.main.humidity)
         ))
 
@@ -91,10 +92,10 @@ export class PathBuilder {
 
     private getAge = (data: Quad): Quad[] => {
         const out = []
-        if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
+        if (data.predicate.equals(new NamedNode(DBP.birthDate))) {
             out.push(quad(
                 data.subject,
-                namedNode("http://dbpedia.org/ontology/age"),
+                namedNode(DBP.age),
                 literal(Age.yearsPassed(new Date(data.object.value)))
             ));
         }
@@ -116,14 +117,14 @@ export class PathBuilder {
 
     private composite2 = (store: N3.Store): Quad[] => {
         const out: Quad[] = []
-        for (const data of store.match(null, namedNode('http://dbpedia.org/ontology/birthDate'), null)) {
+        for (const data of store.match(null, namedNode(DBP.birthDate), null)) {
             out.push(quad(
                 data.subject,
-                namedNode("http://dbpedia.org/ontology/age"),
+                namedNode(DBP.age),
                 literal(Age.yearsPassed(new Date(data.object.value)))
             ));
         }
-        for (const data of store.match(null, namedNode("http://xmlns.com/foaf/0.1/knows"), null)) {
+        for (const data of store.match(null, namedNode(FOAF.knows), null)) {
             out.push(data);
         }
         return out
@@ -131,10 +132,10 @@ export class PathBuilder {
 
     private getBirthYear = (data: Quad): Quad[] => {
         const out: Quad[] = [];
-        if (data.predicate.equals(new NamedNode("http://dbpedia.org/ontology/age"))) {
+        if (data.predicate.equals(new NamedNode(DBP.age))) {
             out.push(quad(
                 data.subject,
-                namedNode("http://dbpedia.org/ontology/birthYear"),
+                namedNode(DBP.birthYear),
                 literal(new Date().getFullYear() - parseInt(data.object.value))
             ))
         }
@@ -143,7 +144,7 @@ export class PathBuilder {
 
     private getFriends = (data: Quad): Quad[] => {
         const out: Quad[] = [];
-        if (data.predicate.equals(new NamedNode("http://xmlns.com/foaf/0.1/knows"))) {
+        if (data.predicate.equals(new NamedNode(FOAF.knows))) {
             out.push(data);
         }
         return out;
