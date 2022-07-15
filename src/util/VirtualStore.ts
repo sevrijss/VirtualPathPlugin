@@ -44,7 +44,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     /**
      * Keeps dependencies between existing resources and their derived ones.
      * The dependencies are used when resources are modified or deleted
-     * @param name - name of the derived resources
+     * @param name - relative path of the derived resources
      * @param originals - name of the resources from which something is derived
      * @private
      *
@@ -74,7 +74,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * Returns a list of identifiers of the resources that depend on the given identifier.
      * @param name - relative path of the identifier
      *
-     * @returns - a list of relative paths
+     * @returns - a list of paths
      */
     public getDependants(name: string): string[] {
         // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\nname:\t${this.resolve(name)}`);
@@ -109,8 +109,9 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     /**
      * Experimental feature - needs work.
      *
-     * Lets the user provide a function which supplies a Representation.
-     * That representation can come from anywhere (api or local file)
+     * Lets the user provide a function which supplies a list of quads, acquired by converting the json from the api.
+     * The processing happens in the same way as {@link addVirtualRoute}
+     *
      * @param name - identifier of the newly created resource
      * @param original - remote resource
      * @param jsonToQuads - function to map json to quads
@@ -226,7 +227,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      *
      * @param name - identifier of the newly created resource
      * @param originals - identifiers of the resources from which needs to be derived
-     * @param processor - processor object
+     * @param processor - {@link Processor} object
      */
     public addVirtualRouteStreamProcessor(name: string, originals: string[], processor: Processor): void {
         return this.addVirtualRouteStream(name, originals, processor.start, processor.process, processor.onClose);
