@@ -10,14 +10,12 @@ const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
 export * from "./util/VirtualStore";
 export * from "./util/PathResolver";
-const quadPrefs = {type: {'internal/quads': 1}};
-
 /**
  * Example of an extended processor object
  */
 class Age extends Processor {
     process(data: Quad): Quad[] {
-        let out = []
+        const out = []
         if (data.predicate.equals(new NamedNode('http://dbpedia.org/ontology/birthDate'))) {
             out.push(quad(
                 data.subject,
@@ -150,7 +148,7 @@ export class PathBuilder {
     };
 
     private composite = (data: Quad): Quad[] => {
-        let out: Quad[] = []
+        const out: Quad[] = []
         const resultAge = this.getAge(data);
         const resultKnows = this.getFriends(data);
         if (resultAge.length > 0) {
@@ -163,7 +161,7 @@ export class PathBuilder {
     }
 
     private composite2 = (store: N3.Store): Quad[] => {
-        let out: Quad[] = []
+        const out: Quad[] = []
         for (const data of store.match(null, namedNode('http://dbpedia.org/ontology/birthDate'), null)) {
             out.push(quad(
                 data.subject,
@@ -179,7 +177,7 @@ export class PathBuilder {
     }
 
     private getBirthYear = (data: Quad): Quad[] => {
-        let out: Quad[] = [];
+        const out: Quad[] = [];
         if (data.predicate.equals(new NamedNode("http://dbpedia.org/ontology/age"))) {
             out.push(quad(
                 data.subject,
@@ -192,7 +190,7 @@ export class PathBuilder {
     }
 
     private getFriends = (data: Quad): Quad[] => {
-        let out: Quad[] = [];
+        const out: Quad[] = [];
         if (data.predicate.equals(new NamedNode("http://xmlns.com/foaf/0.1/knows"))) {
             out.push(data);
         }

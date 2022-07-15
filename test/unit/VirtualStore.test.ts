@@ -68,8 +68,7 @@ describe('A VirtualStore', (): void => {
         // route for testing
         store.addVirtualRouteStream("/derivedResource",
             ["/base"],
-            () => {
-            },
+            jest.fn(),
             (q) => [q],
             () => [])
         expect(store.isVirtual("/derivedResource")).toBeTruthy();

@@ -5,7 +5,13 @@
     "@types/combined-stream": "^1.0.3",
     "@types/jest": "^28.1.5",
     "@types/node-fetch": "^2.6.1",
+    "@typescript-eslint/eslint-plugin": "^5.30.6",
+    "@typescript-eslint/parser": "^5.30.6",
     "componentsjs-generator": "^2.6.0",
+    "eslint": "^8.19.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-tsdoc": "^0.2.16",
+    "eslint-plugin-unused-imports": "^2.0.0",
     "jest": "^28.1.2",
     "ts-jest": "^28.0.5",
     "ts-node": "^9.1.1",
@@ -31,7 +37,8 @@
     "build": "npm run build:ts && npm run build:components",
     "build:components": "componentsjs-generator -s src -c dist/components -i .componentsignore -r virtualStore --typeScopedContexts",
     "build:ts": "tsc",
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint . --ext .ts"
   },
   "keywords": [
     "solid"

@@ -1,0 +1,47 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint",
+    "tsdoc",
+    "import",
+    "unused-imports"
+  ],
+  "ignorePatterns": [ "*.js" ],
+  "extends": [
+    "eslint:recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings",
+    "plugin:import/typescript",
+    "plugin:@typescript-eslint/eslint-recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "rules": {
+    // Naming conventions
+    "@typescript-eslint/naming-convention": [
+      "error",
+      {
+        "selector": "default",
+        "format": [ "camelCase" ],
+        "leadingUnderscore": "forbid",
+        "trailingUnderscore": "forbid"
+      },
+      {
+        "selector": "variable",
+        "format": [ "camelCase", "UPPER_CASE" ],
+        "leadingUnderscore": "forbid",
+        "trailingUnderscore": "forbid"
+      },
+      {
+        "selector": "typeLike",
+        "format": [ "PascalCase" ]
+      },
+      {
+        "selector": [ "typeParameter" ],
+        "format": [ "PascalCase" ],
+        "prefix": [ "T" ]
+      }
+    ],
+    "@typescript-eslint/ban-ts-comment": 1
+  }
+}

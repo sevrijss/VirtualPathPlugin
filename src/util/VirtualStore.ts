@@ -1,5 +1,5 @@
 import {Quad} from "rdf-js";
-import N3 from 'n3';
+import N3, {Store} from 'n3';
 import {
     BasicRepresentation,
     Conditions,
@@ -126,10 +126,10 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         // @ts-expect-error indexing doesn't work for some reason when using strings
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-                const store = new N3.Store();
+                const store = new Store();
                 const result = await fetch(original);
-                let jsonData = await result.json();
-                let data = [guardedStreamFrom(await jsonToQuads(jsonData))]
+                const jsonData = await result.json();
+                const data = [guardedStreamFrom(await jsonToQuads(jsonData))]
 
                 // Utility function derived from CSS, will make your life much easier
                 const transformedStream = transformSafelyMultiple(data, {
@@ -175,8 +175,8 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         // @ts-ignore
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-                let data = []
-                let dupes: N3.Store = new N3.Store()
+                const data = []
+                const dupes: Store = new Store()
                 for (const source of sources) {
                     const input = await this.getRepresentation(source, quadPrefs)
                     data.push(input.data)
@@ -213,7 +213,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     objectMode: true,
                 });
 
-                let temp = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
+                const temp = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
                 return await this.converter.handle({
                     representation: temp,
                     identifier: {path: name},
@@ -252,8 +252,8 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         // @ts-expect-error indexing doesn't work for some reason when using strings
         this.virtualIdentifiers[name] =
             async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
-                const store = new N3.Store();
-                let data = []
+                const store = new Store();
+                const data = []
                 for (const source of sources) {
                     const input = await this.getRepresentation(source, quadPrefs)
                     data.push(input.data)
@@ -296,7 +296,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     }
 
     setRepresentation(identifier: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier[]> {
-        let deps: ResourceIdentifier[] = []
+        const deps: ResourceIdentifier[] = []
         if (identifier.path in this.virtualIdentifiers) {
             throw new MethodNotAllowedHttpError(["setRepresentation"]);
         } else if (identifier.path in this.dependencies) {
@@ -328,10 +328,10 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     }
 
     async deleteResource(identifier: ResourceIdentifier, conditions ?: Conditions): Promise<ResourceIdentifier[]> {
-        let altered: ResourceIdentifier[] = []
+        const altered: ResourceIdentifier[] = []
         if (identifier.path in this.dependencies) {
             // @ts-ignore
-            for (let p: string of this.dependencies[identifier.path]) {
+            for (const p: string of this.dependencies[identifier.path]) {
                 altered.push({path: p})
             }
         }

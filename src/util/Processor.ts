@@ -5,9 +5,6 @@ import {Quad} from "rdf-js";
  */
 export class Processor {
 
-    constructor() {
-    }
-
     /**
      * Is called before any Quads are processed.
      */
@@ -22,7 +19,7 @@ export class Processor {
      * @returns Quads derive from data (default []).
      */
     process(data: Quad): Quad[] {
-        return [];
+        return [data];
     }
 
     /**
