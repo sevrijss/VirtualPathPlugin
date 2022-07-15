@@ -3,10 +3,7 @@ import {Quad} from "rdf-js";
 /**
  * Processor object for processing streaming Quads.
  */
-export class Processor {
-
-    constructor() {
-    }
+export abstract class Processor {
 
     /**
      * Is called before any Quads are processed.
@@ -22,7 +19,7 @@ export class Processor {
      * @returns Quads derive from data (default []).
      */
     process(data: Quad): Quad[] {
-        return [];
+        return [data];
     }
 
     /**

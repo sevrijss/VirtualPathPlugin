@@ -1,7 +1,8 @@
-import {VirtualStore} from '../../src/util/VirtualStore';
+import {UrlBuilder, VirtualStore} from '../../src';
 import {
     BasicRepresentation,
     Conditions,
+    INTERNAL_QUADS,
     MethodNotAllowedHttpError,
     Patch,
     Representation,
@@ -11,14 +12,13 @@ import {
     ResourceIdentifier,
     ResourceStore
 } from "@solid/community-server";
-import {UrlBuilder} from "../../src/util/PathResolver";
 import N3, {DataFactory} from 'n3'
 import {Quad} from "rdf-js";
 import arrayifyStream from "arrayify-stream";
 
 const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
-const quadPrefs = {type: {'internal/quads': 1}};
+const quadPrefs = {type: {INTERNAL_QUADS: 1}};
 
 describe('A VirtualStore', (): void => {
     let store: VirtualStore
@@ -50,13 +50,13 @@ describe('A VirtualStore', (): void => {
             handleSafe: jest.fn().mockResolvedValue({out: true}),
             handle: (i: RepresentationConverterArgs) => i.representation
         } as any;
-        const urlbuilder: UrlBuilder = {resolve: jest.fn((name: string): string => `http://localhost:3000${name}`)} as any;
+        const urlBuilder: UrlBuilder = {resolve: jest.fn((name: string): string => `http://localhost:3000${name}`)} as any;
 
         // VirtualStore
-        store = new VirtualStore(source, converter, urlbuilder)
+        store = new VirtualStore(source, converter, urlBuilder)
 
         baseRep = new BasicRepresentation([], {
-            contentType: 'internal/quads'
+            contentType: INTERNAL_QUADS
         })
         baseRep.data.push(q)
         baseData = [q]
@@ -68,8 +68,7 @@ describe('A VirtualStore', (): void => {
         // route for testing
         store.addVirtualRouteStream("/derivedResource",
             ["/base"],
-            () => {
-            },
+            jest.fn(),
             (q) => [q],
             () => [])
         expect(store.isVirtual("/derivedResource")).toBeTruthy();
