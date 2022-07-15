@@ -2,6 +2,7 @@ import {VirtualStore} from '../../src/util/VirtualStore';
 import {
     BasicRepresentation,
     Conditions,
+    INTERNAL_QUADS,
     MethodNotAllowedHttpError,
     Patch,
     Representation,
@@ -18,7 +19,7 @@ import arrayifyStream from "arrayify-stream";
 
 const {namedNode, literal, defaultGraph, quad} = DataFactory;
 
-const quadPrefs = {type: {'internal/quads': 1}};
+const quadPrefs = {type: {INTERNAL_QUADS: 1}};
 
 describe('A VirtualStore', (): void => {
     let store: VirtualStore
@@ -56,7 +57,7 @@ describe('A VirtualStore', (): void => {
         store = new VirtualStore(source, converter, urlbuilder)
 
         baseRep = new BasicRepresentation([], {
-            contentType: 'internal/quads'
+            contentType: INTERNAL_QUADS
         })
         baseRep.data.push(q)
         baseData = [q]

@@ -20,7 +20,12 @@ import {UrlBuilder} from "./PathResolver";
 import {Processor} from "./Processor";
 import fetch from "node-fetch";
 
-const quadPrefs = {type: {'internal/quads': 1}};
+const quadPrefs = {type: {INTERNAL_QUADS: 1}};
+
+
+interface StringByStringList {
+    [key: string]: string[];
+}
 
 /**
  * Allow containers to have derived resources.
@@ -31,9 +36,9 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     private readonly logger = getLoggerFor(this);
     readonly urlBuilder: UrlBuilder;
 
-    private virtualIdentifiers = {};
+    private virtualIdentifiers: Record<string, (prefs: RepresentationPreferences, cond: Conditions | undefined) => Promise<Representation>> = {};
 
-    dependencies = {};
+    private dependencies: Record<string, string[]> = {};
 
     public constructor(source: T, converter: RepresentationConverter, urlBuilder: UrlBuilder) {
         super(source);
@@ -55,18 +60,16 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             this.logger.error("duplicate routes in Virtual routers");
             return []
         }
-        const sources: ResourceIdentifier[] = originals.map((val: string) => {
-            return {path: this.urlBuilder.resolve(val)}
-        })
-        sources.forEach((source: ResourceIdentifier) => {
+        const sources: ResourceIdentifier[] = originals.map(
+            (val: string) => ({path: this.urlBuilder.resolve(val)})
+        )
+        for (const source of sources) {
             if (source.path in this.dependencies) {
-                // @ts-ignore
                 this.dependencies[source.path].push(this.resolve(name))
             } else {
-                // @ts-ignore
                 this.dependencies[source.path] = [this.resolve(name)]
             }
-        })
+        }
         return sources;
     }
 
@@ -79,7 +82,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     public getDependants(name: string): string[] {
         // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\nname:\t${this.resolve(name)}`);
         if (this.resolve(name) in this.dependencies) {
-            // @ts-ignore
+
             return this.dependencies[this.resolve(name)];
         } else return []
     }
@@ -123,9 +126,8 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                                        processFunction: (arg0: N3.Store) => Quad[]) {
         name = this.urlBuilder.resolve(name);
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
-        // @ts-expect-error indexing doesn't work for some reason when using strings
         this.virtualIdentifiers[name] =
-            async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+            async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
                 const store = new Store();
                 const result = await fetch(original);
                 const jsonData = await result.json();
@@ -140,9 +142,9 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     },
                     flush() {
                         const result = processFunction(store)
-                        result.forEach(val => {
+                        for (const val of result) {
                             this.push(val)
-                        });
+                        }
                     },
                     objectMode: true,
                 });
@@ -172,9 +174,8 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         if (sources.length === 0) {
             return;
         }
-        // @ts-ignore
         this.virtualIdentifiers[name] =
-            async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+            async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
                 const data = []
                 const dupes: Store = new Store()
                 for (const source of sources) {
@@ -188,25 +189,21 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 const transformedStream = transformSafelyMultiple(data, {
                     transform(data: Quad): void {
                         const res = deriveFunction(data);
-                        if (res.length > 0) {
-                            res.forEach(val => {
-                                if (!dupes.has(val)) {
-                                    this.push(val)
-                                    dupes.add(val);
-                                }
-                            });
+                        for (const val of res) {
+                            if (!dupes.has(val)) {
+                                this.push(val)
+                                dupes.add(val);
+                            }
                         }
                     },
                     flush(): void {
                         if (endFunction) {
                             const result = endFunction();
-                            if (result.length !== 0) {
-                                result.forEach(r => {
-                                    if (!dupes.has(r)) {
-                                        this.push(r);
-                                        dupes.add(r);
-                                    }
-                                })
+                            for (const r of result) {
+                                if (!dupes.has(r)) {
+                                    this.push(r);
+                                    dupes.add(r);
+                                }
                             }
                         }
                     },
@@ -249,9 +246,9 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             return;
         }
         // Construct a new function to use the original resource and pass on any preferences and/or conditions
-        // @ts-expect-error indexing doesn't work for some reason when using strings
+
         this.virtualIdentifiers[name] =
-            async (prefs: RepresentationPreferences, cond: Conditions): Promise<Representation> => {
+            async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
                 const store = new Store();
                 const data = []
                 for (const source of sources) {
@@ -268,9 +265,9 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     },
                     flush() {
                         const result = deriveFunction(store)
-                        result.forEach(val => {
+                        for (const val of result) {
                             this.push(val)
-                        });
+                        }
                     },
                     objectMode: true,
                 });
@@ -288,8 +285,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     ): Promise<Representation> {
         if (identifier.path in this.virtualIdentifiers) {
             this.logger.info(`processing ${identifier.path} as derived document`);
-            // @ts-expect-error The object returns an any type,
-            // which the compiler can't work with because we need to return a Promise<Representation>
             return await this.virtualIdentifiers[identifier.path](preferences, conditions);
         }
         return this.source.getRepresentation(identifier, preferences, conditions)
@@ -300,20 +295,18 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         if (identifier.path in this.virtualIdentifiers) {
             throw new MethodNotAllowedHttpError(["setRepresentation"]);
         } else if (identifier.path in this.dependencies) {
-            // @ts-ignore
-            this.dependencies[identifier.path].forEach((s: string) => {
+            for (const s of this.dependencies[identifier.path]) {
                 deps.push({
                     path: s
                 })
-            })
+            }
         }
         return this.source.setRepresentation(identifier, representation, conditions).then(value => {
-            deps.forEach(val => {
-                    if (value.includes(val)) {
-                        value.push(val);
-                    }
+            for (const val of deps) {
+                if (value.includes(val)) {
+                    value.push(val);
                 }
-            )
+            }
             return value
         })
     }
@@ -330,14 +323,12 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     async deleteResource(identifier: ResourceIdentifier, conditions ?: Conditions): Promise<ResourceIdentifier[]> {
         const altered: ResourceIdentifier[] = []
         if (identifier.path in this.dependencies) {
-            // @ts-ignore
-            for (const p: string of this.dependencies[identifier.path]) {
+            for (const p of this.dependencies[identifier.path]) {
                 altered.push({path: p})
             }
         }
         if (identifier.path in this.virtualIdentifiers) {
             const name = identifier.path
-            // @ts-ignore problems with string indexing
             delete this.virtualIdentifiers[name]
             altered.push(identifier);
             altered.forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
