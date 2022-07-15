@@ -24,3 +24,12 @@ The user provides 1 function which will receive an entire `Store` of `Quad`s and
 
 The user can provide an api url and a function to convert the api-json data to `Quad`s. After the convertion, the processor function will be called to process the data.
 The processor function is of the same type as the one in Store mode.
+
+The example in Pathbuilder.ts for the external mode requires an api key from [OpenWeatherMap](https://openweathermap.org/current). Create an account and paste your key in `src/config.ts` as follows:
+```typescript
+const key = "your_api_key"
+
+export {
+    key
+}
+```
