@@ -16,6 +16,8 @@
     "resolveJsonModule": true,
   },
   "include": [
+    "types/ldfetch.d.ts",
+    "types/node-resolve-dependency-graph.d.ts",
     "src"
   ],
   "exclude": [

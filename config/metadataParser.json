@@ -5,17 +5,11 @@
   ],
   "@graph": [
     {
-      "comment": "Supports derived documents.",
-      "@id": "urn:virtualStore:default:ResourceStore_Virtual",
-      "@type": "VirtualStore",
+      "comment": "Metadata parser to extract function(s) for derived resources",
+      "@id": "urn:virtualStore:default:MetadataParser",
+      "@type": "MetadataParser",
       "converter": {
         "@id": "urn:solid-server:default:RepresentationConverter"
-      },
-      "urlBuilder": {
-        "@id": "urn:virtualStore:default:UrlBuilder"
-      },
-      "metadataParser": {
-        "@id": "urn:virtualStore:default:MetadataParser"
       }
     }
   ]

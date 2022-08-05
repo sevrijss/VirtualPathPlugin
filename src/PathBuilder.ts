@@ -1,5 +1,4 @@
 import {VirtualStore} from "./util/VirtualStore";
-import {key} from "./config";
 import {getLoggerFor} from "@solid/community-server";
 import {Quad} from "rdf-js";
 import N3, {DataFactory, NamedNode} from "n3";
@@ -17,18 +16,19 @@ export class PathBuilder {
     public constructor(vStore: VirtualStore) {
         this.virtualStore = vStore;
         const age = new Age()
-        this.virtualStore.addVirtualRouteStream('/age', ['/card.ttl'], age.start, age.process, age.onClose);
-        this.virtualStore.addVirtualRouteStream('/age3', ['/doesntExist.ttl'], age.start, age.process, age.onClose);
-        this.virtualStore.addVirtualRouteStreamProcessor('/age2', ['/card.ttl'], age);
-        this.virtualStore.addVirtualRouteStream('/ageAndKnows', ["/knows.ttl", '/card.ttl'], undefined, this.composite, () => []);
-        this.virtualStore.addVirtualRoute('/ageAndKnows2', ["/knows.ttl", '/card.ttl'], this.composite2);
-        this.virtualStore.addVirtualRouteStream('/birthYear', ['/age'], undefined, this.getBirthYear, () => []);
-        this.virtualStore.addVirtualRouteStream('/friends', ['/knows.ttl'], undefined, this.getFriends, () => []);
-        this.virtualStore.addVirtualRouteRemoteSource(
+        //this.virtualStore.addVirtualRouteStream('/age', ['/card.ttl'], age.start, age.process, age.onClose);
+        //this.virtualStore.addVirtualRouteStream('/age3', ['/doesntExist.ttl'], age.start, age.process, age.onClose);
+        //this.virtualStore.addVirtualRouteStreamProcessor('/age2', ['/card.ttl'], age);
+        //this.virtualStore.addVirtualRouteStream('/ageAndKnows', ["/knows.ttl", '/card.ttl'], undefined, this.composite, () => []);
+        //this.virtualStore.addVirtualRoute('/ageAndKnows2', ["/knows.ttl", '/card.ttl'], this.composite2);
+        //this.virtualStore.addVirtualRouteStream('/birthYear', ['/age'], undefined, this.getBirthYear, () => []);
+        //this.virtualStore.addVirtualRouteStream('/friends', ['/knows.ttl'], undefined, this.getFriends, () => []);
+        /*this.virtualStore.addVirtualRouteRemoteSource(
             '/weather',
             `https://api.openweathermap.org/data/2.5/weather?lat=35&lon=139&appid=${key}`,
             (data) => this.getWeather(data),
             (q) => q.getQuads(null, null, null, defaultGraph()))
+         */
     }
 
     private readonly logger = getLoggerFor("pathBuilder");

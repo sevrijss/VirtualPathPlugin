@@ -36,7 +36,8 @@
 
     "files-virtualStore:config/store_chain.json",
     "files-virtualStore:config/pathBuilder.json",
-    "files-virtualStore:config/urlBuilder.json"
+    "files-virtualStore:config/urlBuilder.json",
+    "files-virtualStore:config/metadataParser.json"
   ],
   "@graph": [
     {
@@ -51,6 +52,8 @@
         },
         {
           "@id": "urn:virtualStore:default:UrlBuilder"
+        },{
+          "@id": "urn:virtualStore:default:MetadataParser"
         }
       ]
     }

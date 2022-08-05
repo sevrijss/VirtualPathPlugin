@@ -1,16 +1,19 @@
 import {Quad} from "rdf-js";
-import N3, {Store} from 'n3';
+import N3, {DataFactory, Store} from 'n3';
 import {
     BasicRepresentation,
     Conditions,
     getLoggerFor,
     guardedStreamFrom,
     INTERNAL_QUADS,
+    InternalServerError,
     MethodNotAllowedHttpError,
     PassthroughStore,
     Patch,
+    RDF,
     Representation,
     RepresentationConverter,
+    RepresentationMetadata,
     RepresentationPreferences,
     ResourceIdentifier,
     ResourceStore
@@ -19,26 +22,35 @@ import {transformSafelyMultiple} from "./StreamUtils";
 import {UrlBuilder} from "./PathResolver";
 import {Processor} from "./Processor";
 import fetch from "node-fetch";
+import {SVR} from "./Vocabulary";
+import {MetadataParser} from "./MetadataParser";
 
-const quadPrefs = {type: {INTERNAL_QUADS: 1}};
+
+const {namedNode, literal, quad} = DataFactory;
+
+const quadPrefs = {type: {[INTERNAL_QUADS]: 1}};
 
 /**
  * Allow containers to have derived resources.
  */
 export class VirtualStore<T extends ResourceStore = ResourceStore> extends PassthroughStore<T> {
-    //protected readonly source: T;
     readonly converter: RepresentationConverter;
     private readonly logger = getLoggerFor(this);
     readonly urlBuilder: UrlBuilder;
-
+    readonly metadataParser: MetadataParser;
     private virtualIdentifiers: Record<string, (prefs: RepresentationPreferences, cond: Conditions | undefined) => Promise<Representation>> = {};
 
     private dependencies: Record<string, string[]> = {};
 
-    public constructor(source: T, converter: RepresentationConverter, urlBuilder: UrlBuilder) {
+    private printMetadata(metadata: RepresentationMetadata) {
+        this.logger.info(metadata.quads().map(q => `${q.subject.value}\t${q.predicate.value}\t${q.object.value}`).join("\n"));
+    }
+
+    public constructor(source: T, converter: RepresentationConverter, urlBuilder: UrlBuilder, metadataParser: MetadataParser) {
         super(source);
         this.converter = converter;
         this.urlBuilder = urlBuilder;
+        this.metadataParser = metadataParser;
     }
 
     /**
@@ -75,7 +87,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * @returns - a list of paths
      */
     public getDependants(name: string): string[] {
-        // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\nname:\t${this.resolve(name)}`);
+        // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\n name:\t${this.resolve(name)}`);
         if (this.resolve(name) in this.dependencies) {
 
             return this.dependencies[this.resolve(name)];
@@ -89,7 +101,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * @returns - true if the resource is derived
      */
     public isVirtual(name: string): boolean {
-        // console.log(`identifiers:\t${Object.keys(this.virtualIdentifiers).join("\t")}\nname:\t${this.resolve(name)}`);
+        // console.log(`identifiers:\t${Object.keys(this.virtualIdentifiers).join("\t")}\n name:\t${this.resolve(name)}`);
         return Object.keys(this.virtualIdentifiers).includes(this.resolve(name));
     }
 
@@ -174,6 +186,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 const data = []
                 const dupes: Store = new Store()
                 for (const source of sources) {
+                    this.logger.info(`Retrieving source\t${source.path}`)
                     const input = await this.getRepresentation(source, quadPrefs)
                     data.push(input.data)
                 }
@@ -271,18 +284,32 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             }
     }
 
-    // Below are modified versions of the corresponding method in PassthroughStore to deal with dependencies
-
     async getRepresentation(
         identifier: ResourceIdentifier,
         preferences: RepresentationPreferences,
         conditions?: Conditions,
     ): Promise<Representation> {
-        if (identifier.path in this.virtualIdentifiers) {
-            this.logger.info(`processing ${identifier.path} as derived document`);
-            return await this.virtualIdentifiers[identifier.path](preferences, conditions);
-        }
-        return this.source.getRepresentation(identifier, preferences, conditions)
+        this.logger.info(identifier.path);
+        const result = await this.source.getRepresentation(identifier, preferences, conditions);
+        const store = new N3.Store(result.metadata.quads());
+        const resourceNode = namedNode(identifier.path)
+        if (store.has(quad(resourceNode, namedNode(RDF.type), namedNode(SVR.VirtualSolidResource)))) {
+            // getting the sources for the derived resource
+            const f = this.metadataParser.parse(
+                result.metadata,
+                identifier,
+                (ident, pref, cond) => this.getRepresentation(ident, pref, cond)
+            );
+
+            //const func = this.virtualIdentifiers[identifier.path]
+            try {
+                return await f(preferences, conditions)
+            } catch (e) {
+                throw new InternalServerError()
+            }
+        } else return result
+        /*
+        return this.source.getRepresentation(identifier, preferences, conditions)*/
     }
 
     setRepresentation(identifier: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier[]> {
