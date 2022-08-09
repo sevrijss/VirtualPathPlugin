@@ -42,6 +42,10 @@ export class FunctionHandler {
         await this.graphHandler.addGraph(iri, localValue);
     }
 
+    async addFunctionResourceQuads(prefix: string, quads: Quad[], localValue: LocalValue | null = null) {
+        await this.graphHandler.addGraphQuads(prefix, quads, localValue);
+    }
+
     async getFunction(iri: string): Promise<Function> {
         const term = this.graphHandler.getSubjectOfType(iri, `${prefixes.fno}Function`);
         if (!term) {
@@ -134,7 +138,6 @@ export class FunctionHandler {
     }
 
     private getMappingsFromFunction(fn: Function) {
-
         const mappings = this.graphHandler.match(null, $rdf.sym(`${prefixes.fno}function`), fn.term as Quad_Object);
         if (mappings.length === 0) {
             return [];
@@ -268,9 +271,7 @@ export class FunctionHandler {
 
     private getCompositionsFromFunction(fn: Function): Composition[] {
         const outputArray = this.getSingleObject(fn.term as Quad_Subject, $rdf.sym(`${prefixes.fno}returns`)) as Collection;
-        console.log(outputArray);
         const outHash = outputArray.elements.map(o => o.value).sort().join("_");
-        console.log(outHash);
         return this.graphHandler.match(
             null,
             $rdf.sym(`${prefixes.rdf}type`),
@@ -296,9 +297,6 @@ export class FunctionHandler {
                                 }
                             }
                         );
-                    console.log(outputs);
-                    console.log(`outHash:\t${outHash}`);
-                    console.log(outputs.map(o => o.value).sort().join('_'));
                     return outputs.map(o => o.value).sort().join('_') === outHash;
                 }
             )

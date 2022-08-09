@@ -8,7 +8,6 @@ export class JavaScriptHandler extends Handler {
 
     async executeFunction(args: {[predicate: string]: any}, options: any): Promise<{ [key: string]: any }> {
         const fnArgs: any[] = [];
-
         if (Object.keys(options.args.positionArgs).length > 0) {
             const maxArg = Object.keys(options.args.positionArgs).map(k => Number(k)).sort().reverse()[0];
             for (let index = 0; index <= maxArg; index++) {

@@ -30,7 +30,12 @@ export const SVR = createUriAndTermNamespace("https://example.com/ns/SolidVirtua
     "streaming",
     "fromResources",
     "usesFunction",
-    "takesOutput"
+    "takesOutput",
+    "literalImplementation",
+    "streamingFunctionType",
+    "Start",
+    "Process",
+    "End",
 );
 
 export const FNO = createUriAndTermNamespace("https://w3id.org/function/ontology#",
@@ -43,6 +48,9 @@ export const FNO = createUriAndTermNamespace("https://w3id.org/function/ontology
     "implementation",
     "Implementation",
 );
+
+export const FNS = createUriAndTermNamespace("https://example.com/functions#",
+)
 
 export const XMLSchema = createUriAndTermNamespace("http://www.w3.org/2001/XMLSchema#",
     "boolean",

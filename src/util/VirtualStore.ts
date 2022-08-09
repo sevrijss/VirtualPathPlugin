@@ -295,7 +295,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
         const resourceNode = namedNode(identifier.path)
         if (store.has(quad(resourceNode, namedNode(RDF.type), namedNode(SVR.VirtualSolidResource)))) {
             // getting the sources for the derived resource
-            const f = this.metadataParser.parse(
+            const f = await this.metadataParser.parse(
                 result.metadata,
                 identifier,
                 (ident, pref, cond) => this.getRepresentation(ident, pref, cond)
@@ -305,6 +305,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
             try {
                 return await f(preferences, conditions)
             } catch (e) {
+                console.log(e)
                 throw new InternalServerError()
             }
         } else return result
