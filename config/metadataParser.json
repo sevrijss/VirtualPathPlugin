@@ -10,7 +10,8 @@
       "@type": "MetadataParser",
       "converter": {
         "@id": "urn:solid-server:default:RepresentationConverter"
-      }
+      },
+      "size": 10,
     }
   ]
 }

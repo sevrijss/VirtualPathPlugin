@@ -65,9 +65,10 @@ export class MetadataParser {
 
     private readonly cache: Cache<string, CacheRecord>
 
-    constructor(converter: RepresentationConverter) {
+    constructor(converter: RepresentationConverter, size:number) {
         this.converter = converter
-        this.cache = new Cache<string, CacheRecord>(10);
+        this.cache = new Cache<string, CacheRecord>(size);
+        this.logger.info(`Cache size set at ${size}`)
     }
 
 
