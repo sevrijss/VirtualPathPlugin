@@ -20,6 +20,7 @@ import {FunctionHandler} from "./functionHandlerJS/FunctionHandler";
 import {JavaScriptHandler} from "./functionHandlerJS/handlers/JavaScriptHandler";
 import {Function as InternalFunction} from "./functionHandlerJS/models/Function"
 import {cyrb53} from "./StringUtils";
+import {Cache} from "./Cache";
 
 export type streamingObject = {
     "start": (() => Promise<void>) | undefined,
@@ -62,11 +63,13 @@ export class MetadataParser {
     private readonly logger = getLoggerFor(this);
     private readonly converter: RepresentationConverter
 
+    private readonly cache: Cache<string, CacheRecord>
+
     constructor(converter: RepresentationConverter) {
         this.converter = converter
+        this.cache = new Cache<string, CacheRecord>(10);
     }
 
-    private Cache: Record<string, CacheRecord> = {}
 
     async parse(metadata: RepresentationMetadata,
                 identifier: ResourceIdentifier,
@@ -78,8 +81,8 @@ export class MetadataParser {
         // compute a hash from all the quads
         const hash = cyrb53(metadata.quads().map(q => hashQuad(q)).sort().join("_"))
         console.log(hash);
-        const cached = this.Cache[identifier.path];
-        if(cached && cached.hash === hash){
+        if (this.cache.has(identifier.path)) {
+            const cached = this.cache.get(identifier.path);
             this.logger.info("returning cached function");
             return cached.value;
         } else {
@@ -283,7 +286,7 @@ export class MetadataParser {
                     preferences: prefs
                 });
             }
-            this.Cache[identifier.path] = {hash, "value": returned}
+            this.cache.add(identifier.path, {hash, "value": returned})
             return returned
         } else if (f.contenttype === "store") {
             const func = f.content as processor;
@@ -317,7 +320,7 @@ export class MetadataParser {
                     preferences: prefs
                 });
             }
-            this.Cache[identifier.path] = {hash, "value": returned}
+            this.cache.add(identifier.path, {hash, "value": returned})
             return returned
 
         } else throw new InternalServerError("Error in metadata");
