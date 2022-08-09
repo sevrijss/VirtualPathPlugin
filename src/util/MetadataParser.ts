@@ -26,7 +26,7 @@ export type streamingObject = {
     "process": (arg0: Quad) => Promise<Quad[]>,
     "end": (() => Promise<Quad[]>) | undefined
 }
-export type FunctionLib =  {contenttype: "stream" | "store", content: streamingObject | processor}
+export type FunctionLib = { contenttype: "stream" | "store", content: streamingObject | processor }
 export const mapper: Record<string, "start" | "process" | "end" | undefined> = {}
 mapper[SVR.Start] = "start"
 mapper[SVR.Process] = "process"
@@ -35,15 +35,15 @@ mapper[SVR.End] = "end"
 /**
  * Has a major collision problem when used with blank nodes
  */
-export function hashQuad(quad:Quad){
-    let subj:string = quad.subject.value;
-    let pred:string = quad.predicate.value;
-    let obj:string = quad.object.value;
-    let graph:string = quad.graph.value;
-    if(quad.subject.termType === "BlankNode"){
+export function hashQuad(quad: Quad) {
+    let subj: string = quad.subject.value;
+    let pred: string = quad.predicate.value;
+    let obj: string = quad.object.value;
+    let graph: string = quad.graph.value;
+    if (quad.subject.termType === "BlankNode") {
         subj = "BLANK";
     }
-    if(quad.object.termType === "BlankNode"){
+    if (quad.object.termType === "BlankNode") {
         obj = "BLANK";
     }
     return cyrb53([subj, pred, obj, graph].join("_"))
@@ -53,6 +53,10 @@ export type processor = ((arg0: Store) => Quad[])
 
 const quadPrefs = {type: {[INTERNAL_QUADS]: 1}};
 const {namedNode, literal, quad} = DataFactory;
+export type CacheRecord = {
+    "hash": number,
+    "value": (prefs: RepresentationPreferences, cond: (Conditions | undefined)) => Promise<Representation>
+}
 
 export class MetadataParser {
     private readonly logger = getLoggerFor(this);
@@ -62,8 +66,7 @@ export class MetadataParser {
         this.converter = converter
     }
 
-    private Cache: Record<string, Record<number, FunctionLib>> = {}
-    private temp:number[] = [];
+    private Cache: Record<string, CacheRecord> = {}
 
     async parse(metadata: RepresentationMetadata,
                 identifier: ResourceIdentifier,
@@ -75,6 +78,14 @@ export class MetadataParser {
         // compute a hash from all the quads
         const hash = cyrb53(metadata.quads().map(q => hashQuad(q)).sort().join("_"))
         console.log(hash);
+        const cached = this.Cache[identifier.path];
+        if(cached && cached.hash === hash){
+            this.logger.info("returning cached function");
+            return cached.value;
+        } else {
+            this.logger.info("no up-to-date cache found");
+        }
+
 
         const handler = new FunctionHandler();
         await handler.addFunctionResourceQuads(FNS.namespace, metadata.quads());
@@ -233,7 +244,7 @@ export class MetadataParser {
 
         if (f.contenttype === "stream") {
             const funcs = f.content as streamingObject
-            return async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
+            const returned = async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
                 const data = []
                 const dupes: Store = new Store()
                 for (const source of sources) {
@@ -272,9 +283,11 @@ export class MetadataParser {
                     preferences: prefs
                 });
             }
+            this.Cache[identifier.path] = {hash, "value": returned}
+            return returned
         } else if (f.contenttype === "store") {
             const func = f.content as processor;
-            return async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
+            const returned = async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
                 const store = new Store();
                 const data = []
                 for (const source of sources) {
@@ -304,6 +317,8 @@ export class MetadataParser {
                     preferences: prefs
                 });
             }
+            this.Cache[identifier.path] = {hash, "value": returned}
+            return returned
 
         } else throw new InternalServerError("Error in metadata");
 
