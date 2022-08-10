@@ -9,6 +9,7 @@ import prefixes from './prefixes';
 import {Quad, Term} from 'rdf-js';
 import {ImplementationHandler} from './handlers/ImplementationHandler';
 import {Quad_Object, Quad_Predicate, Quad_Subject} from "rdflib/lib/tf-types";
+import {getLoggerFor} from "@solid/community-server";
 
 type DependencyInputs = {
     type: "inputs",
@@ -30,6 +31,7 @@ type DependencyFunction = {
 }
 
 export class FunctionHandler {
+    private readonly logger = getLoggerFor(this);
     private graphHandler: GraphHandler;
     implementationHandler: ImplementationHandler;
 
@@ -71,7 +73,7 @@ export class FunctionHandler {
     private linkMappedImplementations(fn: Function) {
         const mappings: Mapping[] = this.getMappingsFromFunction(fn);
         if (mappings.length === 0) {
-            console.warn(`Could not find any relevant mapping for function ${fn.id}`);
+            this.logger.warn(`Could not find any relevant mapping for function ${fn.id}`);
         }
         const loaded: Record<string, any> = {};
         for (const mapping of mappings) {
@@ -82,6 +84,10 @@ export class FunctionHandler {
                     args: this.getArgsFromMapping(mapping),
                     returns: this.getReturnsFromMapping(mapping),
                 });
+                const options = this.implementationHandler.getImplementation(implementation.id).options;
+                if(options.priority){
+                    implementation.pref = options.priority;
+                }
                 return implementationLinked && optionsAreSet;
             });
             if (loadedImplementations.length > 0) {
@@ -97,18 +103,22 @@ export class FunctionHandler {
     private getImplementationViaMappings(fn: Function): Implementation | null {
         const mappedImplementations = this.linkMappedImplementations(fn);
         if (Object.keys(mappedImplementations).length === 0) {
-            console.warn(`Could not find any relevant mapping for function ${fn.id}`);
+            this.logger.warn(`Could not find any relevant mapping for function ${fn.id}`);
+            return null;
         }
-        for (const mappingId in mappedImplementations) {
+        const mappingId = Object.keys(mappedImplementations)[0];
+        return mappedImplementations[mappingId].loadedImplementations.sort(
+            (impA: Implementation, impB: Implementation) => impA.pref - impB.pref
+        )[0];
+        /*for (const mappingId in mappedImplementations) {
             return mappedImplementations[mappingId].loadedImplementations[0];
-        }
-        return null;
+        }*/
     }
 
     getHandlerViaCompositions(fn: Function): Composition | null {
         const compositions: Composition[] = this.getCompositionsFromFunction(fn);
         if (compositions.length === 0) {
-            console.warn(`Could not find any relevant composition for function ${fn.id}`);
+            this.logger.warn(`Could not find any relevant composition for function ${fn.id}`);
         }
         for (const composition of compositions) {
             if (this.tryToLoadComposition(composition)) {
@@ -128,7 +138,7 @@ export class FunctionHandler {
             throw Error(`Subject ${subject.value} without ${predicate.value} defined!`);
         }
         if (objects.length > 1) {
-            console.warn(`Too many objects for ${predicate.value} found for ${subject.value}, just picking one at random`);
+            this.logger.warn(`Too many objects for ${predicate.value} found for ${subject.value}, just picking one at random`);
         }
         return objects[0];
     }
@@ -159,20 +169,20 @@ export class FunctionHandler {
         parameterMappings.forEach((pMapping) => {
             let parameters = this.getObjects(pMapping as Quad_Subject, $rdf.sym(`${prefixes.fnom}functionParameter`));
             if (parameters.length === 0) {
-                console.warn(`Could not find parameter assigned to ${pMapping.value}`);
+                this.logger.warn(`Could not find parameter assigned to ${pMapping.value}`);
                 return;
             }
             if (parameters.length > 1) {
-                console.warn(`More parameters for ${pMapping.value} than expected (1). Picking one at random.`);
+                this.logger.warn(`More parameters for ${pMapping.value} than expected (1). Picking one at random.`);
             }
             let parameter = parameters[0];
             let types = this.getObjects(parameter as Quad_Subject, $rdf.sym(`${prefixes.fno}type`));
             const predicate = this.getSingleObject(parameter as Quad_Subject, $rdf.sym(`${prefixes.fno}predicate`));
             if (types.length === 0) {
-                console.warn(`No type information for parameter ${parameter.value} found`);
+                this.logger.warn(`No type information for parameter ${parameter.value} found`);
             }
             if (types.length > 1) {
-                console.warn(`More types for ${parameter.value} than expected (1). Picking one at random.`);
+                this.logger.warn(`More types for ${parameter.value} than expected (1). Picking one at random.`);
             }
             let type = types[0] || null;
             if (this.graphHandler.match(pMapping as Quad_Subject, $rdf.sym(`${prefixes.rdf}type`), $rdf.sym(`${prefixes.fnom}PositionParameterMapping`)).length > 0) {
@@ -211,17 +221,17 @@ export class FunctionHandler {
         returnMappings.forEach((rMapping) => {
             let outputs = this.getObjects(rMapping as Quad_Subject, $rdf.sym(`${prefixes.fnom}functionOutput`));
             if (outputs.length === 0) {
-                console.warn(`Could not find output assigned to ${rMapping.value}`);
+                this.logger.warn(`Could not find output assigned to ${rMapping.value}`);
                 return;
             }
             if (outputs.length > 1) {
-                console.warn(`More outputs for ${rMapping.value} than expected (1).
+                this.logger.warn(`More outputs for ${rMapping.value} than expected (1).
          Picking one at random.`);
             }
             let output = outputs[0] as Quad_Subject;
             let predicates = this.getObjects(output, $rdf.sym(`${prefixes.fno}predicate`));
             if (predicates.length === 0) {
-                console.warn(`Could not find predicate of ${output.value}`);
+                this.logger.warn(`Could not find predicate of ${output.value}`);
                 return;
             }
             // no idea what this should do. In the original code output was converterd from a list to a single object
@@ -238,10 +248,10 @@ export class FunctionHandler {
 
             let types = this.getObjects(output, $rdf.sym(`${prefixes.fno}type`));
             if (types.length === 0) {
-                console.warn(`No type information for parameter ${output.value} found`);
+                this.logger.warn(`No type information for parameter ${output.value} found`);
             }
             if (types.length > 1) {
-                console.warn(`More types for ${output.value} than expected (1). Picking one at random.`);
+                this.logger.warn(`More types for ${output.value} than expected (1). Picking one at random.`);
             }
             let type = types[0] || null;
             if (this.graphHandler.match(rMapping as Quad_Subject, $rdf.sym(`${prefixes.rdf}type`), $rdf.sym(`${prefixes.fnom}DefaultReturnMapping`)).length > 0) {
@@ -395,7 +405,7 @@ export class FunctionHandler {
         for (const fnId of otherFn) {
             const mappedImplementations = this.linkMappedImplementations((dependencyMeta[fnId] as DependencyFunction).fn);
             if (Object.keys(mappedImplementations).length === 0) {
-                console.warn(`Couldn't link implementation of ${(dependencyMeta[fnId] as DependencyFunction).fn.id}`);
+                this.logger.warn(`Couldn't link implementation of ${(dependencyMeta[fnId] as DependencyFunction).fn.id}`);
                 return false;
             }
         }

@@ -18,7 +18,6 @@ import {Functions} from "./Functions";
 import {transformSafelyMultiple} from "./StreamUtils";
 import {FunctionHandler} from "./functionHandlerJS/FunctionHandler";
 import {JavaScriptHandler} from "./functionHandlerJS/handlers/JavaScriptHandler";
-import {Function as InternalFunction} from "./functionHandlerJS/models/Function"
 import {cyrb53} from "./StringUtils";
 import {Cache} from "./Cache";
 
@@ -35,6 +34,20 @@ mapper[SVR.End] = "end"
 
 /**
  * Has a major collision problem when used with blank nodes
+ * If a datafile contains
+ * ```
+ * card.ttl#me foaf:knows blank1
+ *             foaf:knows blank2
+ * blank1 age 2
+ * blank2 age 4
+ * ```
+ * this will have the same hash as
+ * ```
+ * card.ttl#me foaf:knows blank1
+ *             foaf:knows blank2
+ * blank1 age 4
+ * blank2 age 2
+ * ```
  */
 export function hashQuad(quad: Quad) {
     let subj: string = quad.subject.value;
@@ -65,7 +78,7 @@ export class MetadataParser {
 
     private readonly cache: Cache<string, CacheRecord>
 
-    constructor(converter: RepresentationConverter, size:number) {
+    constructor(converter: RepresentationConverter, size: number) {
         this.converter = converter
         this.cache = new Cache<string, CacheRecord>(size);
         this.logger.info(`Cache size set at ${size}`)
@@ -79,26 +92,29 @@ export class MetadataParser {
                          conditions?: Conditions,
                 ) => Promise<Representation>):
         Promise<(prefs: RepresentationPreferences, cond: (Conditions | undefined)) => Promise<Representation>> {
+
+        const name = identifier.path;
+        this.logger.info(name);
+
         // compute a hash from all the quads
         const hash = cyrb53(metadata.quads().map(q => hashQuad(q)).sort().join("_"))
-        console.log(hash);
-        if (this.cache.has(identifier.path)) {
-            const cached = this.cache.get(identifier.path);
+
+        // cache system
+        if (this.cache.has(name)) {
+            const cached = this.cache.get(name);
             this.logger.info("returning cached function");
             return cached.value;
         } else {
             this.logger.info("no up-to-date cache found");
         }
 
-
+        // FnO Handler init
         const handler = new FunctionHandler();
         await handler.addFunctionResourceQuads(FNS.namespace, metadata.quads());
-        const name = identifier.path;
-        this.logger.info(name);
+
+        // Quad Store
         const store = new N3.Store(metadata.quads());
         const resourceNode = namedNode(identifier.path);
-        //console.log(store.getObjects(null, namedNode(POSIX.mtime), null))
-        //console.log(store.getObjects(null, namedNode(DC.modified), null))
 
         // extract sources to use
         const sources: ResourceIdentifier[] = store.getQuads(
@@ -110,141 +126,104 @@ export class MetadataParser {
             .map(iri => ({path: iri}));
 
         // check if it's a streaming route
-        const streaming = store.has(quad(
-            resourceNode,
-            namedNode(SVR.streaming),
-            literal("true", namedNode(XMLSchema.boolean)))
-        )
+        const streaming = store.has(quad(resourceNode, namedNode(SVR.streaming), literal("true", namedNode(XMLSchema.boolean))))
 
-        // get all the function IRI's in the metadata File.
-        const fns_iris = store.getQuads(
-            null,
-            RDF.type,
-            FNO.Function,
-            null
-        ).map(q => q.subject.value);
+        // get all the function IRIs in the metadata File.
+        const fns_iris = store.getQuads(null, RDF.type, FNO.Function, null).map(q => q.subject.value);
 
         // object to collect the functions for the routes
         const f: FunctionLib = {
-            contenttype: streaming ? "stream" : "store" as "stream" | "store",
+            contenttype: streaming ? "stream" : "store",
             content: streaming ? {
                 "start": undefined,
                 "process": (q: Quad) => new Promise(() => []),
                 "end": undefined
-            } as streamingObject : ((s: Store) => []) as processor
+            } : ((s: Store) => [])
         }
 
         // use the FnO handler to load the functions
         const jsHandler = new JavaScriptHandler();
-        let fns2: ({ function: InternalFunction, internal: boolean, name: string | undefined })[] =
-            await Promise.all(
-                fns_iris.map(
-                    async iri => {
-                        const result = await handler.getFunction(iri);
-                        const mappings = store.getQuads(
-                            null,
-                            namedNode(FNO.function),
-                            namedNode(iri),
-                            null).filter((q: Quad) => store.has(quad(q.subject, namedNode(RDF.type), namedNode(FNO.Mapping))));
-                        let internal = true;
-                        let internalName: string | undefined = undefined
-                        mappings.forEach(mappingQuad => {
-                            store.getQuads(mappingQuad.subject, FNO.implementation, null, null).forEach(implementation => {
-                                const hasInternal = store.has(
-                                    quad(
-                                        namedNode(implementation.object.value),
-                                        namedNode(RDF.type),
-                                        namedNode(SVR.internalImplementation)
-                                    )
-                                )
-                                if (hasInternal) {
-                                    internalName = store.getQuads(
-                                        implementation.object.value,
-                                        DOAP.name,
-                                        null,
-                                        null
-                                    )[0].object.value;
-                                    if (internalName) {
-                                        if (Functions[internalName]) {
-                                            handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {fn: Functions[internalName]});
-                                        } else {
-                                            throw new InternalServerError(`no internal implementation found for name ${internalName}`);
-                                        }
-                                    } else {
-                                        throw new InternalServerError("No `DOAP.name` predicate found.");
-                                    }
-                                } else {
-                                    /**
-                                     * TODO: if remote function "collection" gets implemented, it should be used here.
-                                     * Currently the function is created from a string in de rdf file, using the `Function` constructor
-                                     */
-                                    let functionString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
-                                    const f = Function(`return ${functionString}`)
-                                    handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {fn: f()});
+        for (const iri of fns_iris) {
+            const result = await handler.getFunction(iri);
+            const mappings = store.getQuads(null, namedNode(FNO.function), namedNode(iri), null)
+                .filter((q: Quad) => store.has(quad(q.subject, namedNode(RDF.type), namedNode(FNO.Mapping))));
+            let internalName: string | undefined = undefined
+            mappings.forEach(mappingQuad => {
+                store.getQuads(mappingQuad.subject, FNO.implementation, null, null).forEach(implementation => {
+                    const hasInternal = store.has(quad(namedNode(implementation.object.value), namedNode(RDF.type), namedNode(SVR.internalImplementation)))
+                    if (!hasInternal) {
+                        /**
+                         * TODO: if remote function "collection" gets implemented, it should be used here.
+                         * Currently the function is created from a string in de rdf file, using the `Function` constructor
+                         */
+                        let functionString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
+                        const f = Function(`return ${functionString}`)()
+                        handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
+                            fn: f,
+                            priority: 3
+                        });
+                    }
+                    const isUsed = store.has(quad(resourceNode, namedNode(SVR.usesFunction), namedNode(iri)));
+                    if (isUsed) {
+                        if (streaming) {
+                            const name = store.getObjects(iri, SVR.streamingFunctionType, null)[0].value;
+                            const type = mapper[name];
+                            if (hasInternal) {
+                                const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
+                                if (names.length !== 1) {
+                                    throw new InternalServerError(`multiple internal names found for ${iri}`);
                                 }
-                                internal = internal && hasInternal
-                            })
-                        })
-                        if (store.has(
-                            quad(
-                                resourceNode,
-                                namedNode(SVR.usesFunction),
-                                namedNode(iri)
-                            )
-                        )) {
-                            if (streaming) {
-                                const name = store.getObjects(iri, SVR.streamingFunctionType, null)[0].value;
-                                const type = mapper[name];
-                                if (!type) {
-                                    throw new InternalServerError("something went wrong while parsing the function metadata");
-                                }
-                                f.contenttype = "stream";
-                                switch (type) {
-                                    case "start":
-                                        (f.content as streamingObject)["start"] = async () => {
-                                            const functionResult = await handler.executeFunction(result, {});
-                                            const outputs = Object.keys(functionResult);
-                                            if (outputs.length !== 0) {
-                                                this.logger.warn("Start function has outputs. They are ignored");
-                                            }
-                                            return;
-                                        }
-                                        break;
-                                    case "process":
-                                        (f.content as streamingObject)["process"] = async (arg0: Quad) => {
-                                            const quadName = "https://example.com/functions#quad"
-                                            const functionResult = await handler.executeFunction(result, {[`${quadName}`]: arg0,});
-                                            const outputs = Object.keys(functionResult);
-                                            if (outputs.length !== 1) {
-                                                throw new InternalServerError("The Processing function must return 1 and only 1 value of type Quad[]")
-                                            }
-                                            return functionResult[outputs[0]] as Quad[]
-                                        }
-                                        break;
-                                    case "end":
-                                        (f.content as streamingObject)["end"] = async () => {
-                                            const functionResult = await handler.executeFunction(result, {});
-                                            const outputs = Object.keys(functionResult);
-                                            if (outputs.length !== 1) {
-                                                throw new InternalServerError("The End function must return 1 and only 1 value of type Quad[]")
-                                            }
-                                            return functionResult[outputs[0]] as Quad[]
-                                        }
-                                        break;
-                                    default:
-                                        throw new InternalServerError("The server encountered an impossible state");
+                                internalName = names[0].object.value;
+                                const func = Functions[internalName]
+                                if (!func) {
+                                    throw new InternalServerError(`no internal function found for ${iri} with name ${names[0].object.value}`)
                                 }
 
                             }
-
+                            if (!type) {
+                                throw new InternalServerError("something went wrong while parsing the function metadata");
+                            }
+                            f.contenttype = "stream";
+                            switch (type) {
+                                case "start":
+                                    (f.content as streamingObject)["start"] = hasInternal ? () => Functions[internalName as string]() : async () => {
+                                        const functionResult = await handler.executeFunction(result, {});
+                                        const outputs = Object.keys(functionResult);
+                                        if (outputs.length !== 0) {
+                                            this.logger.warn("Start function has outputs. They are ignored");
+                                        }
+                                        return;
+                                    }
+                                    break;
+                                case "process":
+                                    (f.content as streamingObject)["process"] = hasInternal ? (arg0:Quad) => Functions[internalName as string](arg0) : async (arg0: Quad) => {
+                                        const quadName = "https://example.com/functions#quad"
+                                        const functionResult = await handler.executeFunction(result, {[`${quadName}`]: arg0,});
+                                        const outputs = Object.keys(functionResult);
+                                        if (outputs.length !== 1) {
+                                            throw new InternalServerError("The Processing function must return 1 and only 1 value of type Quad[]")
+                                        }
+                                        return functionResult[outputs[0]] as Quad[]
+                                    }
+                                    break;
+                                case "end":
+                                    (f.content as streamingObject)["end"] = hasInternal? () => Functions[internalName as string]() : async () => {
+                                        const functionResult = await handler.executeFunction(result, {});
+                                        const outputs = Object.keys(functionResult);
+                                        if (outputs.length !== 1) {
+                                            throw new InternalServerError("The End function must return 1 and only 1 value of type Quad[]")
+                                        }
+                                        return functionResult[outputs[0]] as Quad[]
+                                    }
+                                    break;
+                                default:
+                                    throw new InternalServerError("The server encountered an impossible state");
+                            }
                         }
-                        return {
-                            function: result,
-                            internal: internal,
-                            name: internalName
-                        };
                     }
-                ));
+                })
+            })
+        }
 
         if (f.contenttype === "stream") {
             const funcs = f.content as streamingObject

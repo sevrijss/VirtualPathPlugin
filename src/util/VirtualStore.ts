@@ -20,7 +20,6 @@ import {
 } from "@solid/community-server";
 import {transformSafelyMultiple} from "./StreamUtils";
 import {UrlBuilder} from "./PathResolver";
-import {Processor} from "./Processor";
 import fetch from "node-fetch";
 import {SVR} from "./Vocabulary";
 import {MetadataParser} from "./MetadataParser";
@@ -120,7 +119,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
      * Experimental feature - needs work.
      *
      * Lets the user provide a function which supplies a list of quads, acquired by converting the json from the api.
-     * The processing happens in the same way as {@link addVirtualRoute}
      *
      * @param name - identifier of the newly created resource
      * @param original - remote resource
@@ -149,130 +147,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                     },
                     flush() {
                         const result = processFunction(store)
-                        for (const val of result) {
-                            this.push(val)
-                        }
-                    },
-                    objectMode: true,
-                });
-                const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
-                return await this.converter.handle({representation: out, identifier: {path: name}, preferences: prefs});
-            }
-    }
-
-    /**
-     * Create a derived resource for which the processing function works on single Quads.
-     *
-     * The Quads are supplied in a streaming fashion: one by one.
-     *
-     * @param name - identifier of the newly created resource
-     * @param originals - identifiers of the resources from which needs to be derived
-     * @param startFunction - function that will be called before the data arrives (Optional)
-     * @param deriveFunction - function that will be called with the data chunks (Quads)
-     * @param endFunction - function that will be called after the data arrives (Optional)
-     */
-    public addVirtualRouteStream(name: string,
-                                 originals: string[],
-                                 startFunction: undefined | ((arg0: void) => void),
-                                 deriveFunction: (arg0: Quad) => Quad[],
-                                 endFunction: undefined | ((arg0: void) => Quad[])): void {
-        const sources = this.checkDependencies(name, originals);
-        name = this.urlBuilder.resolve(name);
-        if (sources.length === 0) {
-            return;
-        }
-        this.virtualIdentifiers[name] =
-            async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
-                const data = []
-                const dupes: Store = new Store()
-                for (const source of sources) {
-                    this.logger.info(`Retrieving source\t${source.path}`)
-                    const input = await this.getRepresentation(source, quadPrefs)
-                    data.push(input.data)
-                }
-                if (startFunction) {
-                    startFunction();
-                }
-                // Utility function derived from CSS, will make your life much easier
-                const transformedStream = transformSafelyMultiple(data, {
-                    transform(data: Quad): void {
-                        const res = deriveFunction(data);
-                        for (const val of res) {
-                            if (!dupes.has(val)) {
-                                this.push(val)
-                                dupes.add(val);
-                            }
-                        }
-                    },
-                    flush(): void {
-                        if (endFunction) {
-                            const result = endFunction();
-                            for (const r of result) {
-                                if (!dupes.has(r)) {
-                                    this.push(r);
-                                    dupes.add(r);
-                                }
-                            }
-                        }
-                    },
-                    objectMode: true,
-                });
-
-                const temp = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
-                return await this.converter.handle({
-                    representation: temp,
-                    identifier: {path: name},
-                    preferences: prefs
-                });
-            }
-    }
-
-    /**
-     * Creates a derived resource with a processor object for handling
-     *
-     * @param name - identifier of the newly created resource
-     * @param originals - identifiers of the resources from which needs to be derived
-     * @param processor - {@link Processor} object
-     */
-    public addVirtualRouteStreamProcessor(name: string, originals: string[], processor: Processor): void {
-        return this.addVirtualRouteStream(name, originals, processor.start, processor.process, processor.onClose);
-    }
-
-    /**
-     * Create a derived resource for which the processing function works on a store of Quads.
-     *
-     * @param name - identifier of the newly created resource
-     * @param originals - identifiers of the resources from which needs to be derived
-     * @param deriveFunction - the function to convert the original to the resource you want.
-     */
-    public addVirtualRoute(name: string,
-                           originals: string[],
-                           deriveFunction: (arg0: N3.Store) => Quad[]): void {
-        const sources = this.checkDependencies(name, originals);
-        name = this.urlBuilder.resolve(name);
-        if (sources.length === 0) {
-            return;
-        }
-        // Construct a new function to use the original resource and pass on any preferences and/or conditions
-
-        this.virtualIdentifiers[name] =
-            async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
-                const store = new Store();
-                const data = []
-                for (const source of sources) {
-                    const input = await this.getRepresentation(source, quadPrefs)
-                    data.push(input.data)
-                }
-
-                // Utility function derived from CSS, will make your life much easier
-                const transformedStream = transformSafelyMultiple(data, {
-                    transform(data: Quad): void {
-                        if (!store.has(data)) {
-                            store.add(data)
-                        }
-                    },
-                    flush() {
-                        const result = deriveFunction(store)
                         for (const val of result) {
                             this.push(val)
                         }
