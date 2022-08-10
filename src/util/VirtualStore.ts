@@ -7,13 +7,10 @@ import {
     guardedStreamFrom,
     INTERNAL_QUADS,
     InternalServerError,
-    MethodNotAllowedHttpError,
     PassthroughStore,
-    Patch,
     RDF,
     Representation,
     RepresentationConverter,
-    RepresentationMetadata,
     RepresentationPreferences,
     ResourceIdentifier,
     ResourceStore
@@ -39,12 +36,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     readonly metadataParser: MetadataParser;
     private virtualIdentifiers: Record<string, (prefs: RepresentationPreferences, cond: Conditions | undefined) => Promise<Representation>> = {};
 
-    private dependencies: Record<string, string[]> = {};
-
-    private printMetadata(metadata: RepresentationMetadata) {
-        this.logger.info(metadata.quads().map(q => `${q.subject.value}\t${q.predicate.value}\t${q.object.value}`).join("\n"));
-    }
-
     public constructor(source: T, converter: RepresentationConverter, urlBuilder: UrlBuilder, metadataParser: MetadataParser) {
         super(source);
         this.converter = converter;
@@ -53,55 +44,15 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     }
 
     /**
-     * Keeps dependencies between existing resources and their derived ones.
-     * The dependencies are used when resources are modified or deleted
-     * @param name - relative path of the derived resources
-     * @param originals - name of the resources from which something is derived
-     * @private
-     *
-     * @returns - list of resourceIdentifiers for the original resources
-     */
-    private checkDependencies(name: string, originals: string[]): ResourceIdentifier[] {
-        if (this.isVirtual(name)) {
-            this.logger.error("duplicate routes in Virtual routers");
-            return []
-        }
-        const sources: ResourceIdentifier[] = originals.map(
-            (val: string) => ({path: this.urlBuilder.resolve(val)})
-        )
-        for (const source of sources) {
-            if (source.path in this.dependencies) {
-                this.dependencies[source.path].push(this.resolve(name))
-            } else {
-                this.dependencies[source.path] = [this.resolve(name)]
-            }
-        }
-        return sources;
-    }
-
-    /**
-     * Returns a list of identifiers of the resources that depend on the given identifier.
-     * @param name - relative path of the identifier
-     *
-     * @returns - a list of paths
-     */
-    public getDependants(name: string): string[] {
-        // console.log(`dependencies:\t${Object.keys(this.dependencies).join("\t")}\n name:\t${this.resolve(name)}`);
-        if (this.resolve(name) in this.dependencies) {
-
-            return this.dependencies[this.resolve(name)];
-        } else return []
-    }
-
-    /**
      * returns if a given identifier is a derived resource or not
      * @param name - a relative identifier
      *
      * @returns - true if the resource is derived
      */
-    public isVirtual(name: string): boolean {
-        // console.log(`identifiers:\t${Object.keys(this.virtualIdentifiers).join("\t")}\n name:\t${this.resolve(name)}`);
-        return Object.keys(this.virtualIdentifiers).includes(this.resolve(name));
+    public async isVirtual(name: string): Promise<boolean> {
+        const res = await this.getRepresentation({path: name}, {type: {[INTERNAL_QUADS]: 1}})
+        return new Store(res.metadata.quads()).has(quad(namedNode(name), namedNode(RDF.type), namedNode(SVR.VirtualSolidResource)));
+        // return Object.keys(this.virtualIdentifiers).includes(this.resolve(name));
     }
 
     /**
@@ -165,90 +116,21 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     ): Promise<Representation> {
         this.logger.info(identifier.path);
         const result = await this.source.getRepresentation(identifier, preferences, conditions);
-        const store = new N3.Store(result.metadata.quads());
-        const resourceNode = namedNode(identifier.path)
-        if (store.has(quad(resourceNode, namedNode(RDF.type), namedNode(SVR.VirtualSolidResource)))) {
-            // getting the sources for the derived resource
+        if (await this.isVirtual(identifier.path)) {
+            // creating the function to execute base on the metadata from the resource
             const f = await this.metadataParser.parse(
                 result.metadata,
                 identifier,
                 (ident, pref, cond) => this.getRepresentation(ident, pref, cond)
             );
-
-            //const func = this.virtualIdentifiers[identifier.path]
+            // executing the function
             try {
                 return await f(preferences, conditions)
             } catch (e) {
-                console.log(e)
-                throw new InternalServerError()
+                const error = e as Error
+                console.log(error.message)
+                throw new InternalServerError(error.message)
             }
         } else return result
-        /*
-        return this.source.getRepresentation(identifier, preferences, conditions)*/
-    }
-
-    setRepresentation(identifier: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier[]> {
-        const deps: ResourceIdentifier[] = []
-        if (identifier.path in this.virtualIdentifiers) {
-            throw new MethodNotAllowedHttpError(["setRepresentation"]);
-        } else if (identifier.path in this.dependencies) {
-            for (const s of this.dependencies[identifier.path]) {
-                deps.push({
-                    path: s
-                })
-            }
-        }
-        return this.source.setRepresentation(identifier, representation, conditions).then(value => {
-            for (const val of deps) {
-                if (value.includes(val)) {
-                    value.push(val);
-                }
-            }
-            return value
-        })
-    }
-
-    // todo insert a file to mirror the virtual routes
-    addResource(container: ResourceIdentifier, representation: Representation, conditions?: Conditions): Promise<ResourceIdentifier> {
-        return super.addResource(container, representation, conditions);
-    }
-
-    hasResource(identifier: ResourceIdentifier): Promise<boolean> {
-        return super.hasResource(identifier);
-    }
-
-    async deleteResource(identifier: ResourceIdentifier, conditions ?: Conditions): Promise<ResourceIdentifier[]> {
-        const altered: ResourceIdentifier[] = []
-        if (identifier.path in this.dependencies) {
-            for (const p of this.dependencies[identifier.path]) {
-                altered.push({path: p})
-            }
-        }
-        if (identifier.path in this.virtualIdentifiers) {
-            const name = identifier.path
-            delete this.virtualIdentifiers[name]
-            altered.push(identifier);
-            altered.forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
-            return new Promise((resolve, reject) => {
-                resolve(altered);
-            })
-        } else {
-            const result = await super.deleteResource(identifier, conditions)
-            this.logger.info(result.length.toString());
-            //result.filter(ident => ident.path !== identifier.path).forEach((ident: ResourceIdentifier) => this.deleteResource(ident, conditions))
-            altered.forEach(val => {
-                this.deleteResource(val);
-                result.push(val)
-            })
-            return result
-        }
-    }
-
-    modifyResource(identifier: ResourceIdentifier, patch: Patch, conditions ?: Conditions): Promise<ResourceIdentifier[]> {
-        if (identifier.path in this.virtualIdentifiers
-        ) {
-            throw new MethodNotAllowedHttpError();
-        }
-        return super.modifyResource(identifier, patch, conditions);
     }
 }

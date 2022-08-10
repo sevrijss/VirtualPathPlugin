@@ -72,6 +72,14 @@ export type CacheRecord = {
     "value": (prefs: RepresentationPreferences, cond: (Conditions | undefined)) => Promise<Representation>
 }
 
+/**
+ * Class to parse the metadata that belongs to a virtual resource.
+ * The metadata should contain rdf triples that will be used to create functions
+ * via the {@link https://fno.io/ FnO}.
+ *
+ * The resulting function to derive the data will be cached using a {@link Cache}.
+ * The cache size can be set via the constructor of this class.
+ */
 export class MetadataParser {
     private readonly logger = getLoggerFor(this);
     private readonly converter: RepresentationConverter
@@ -84,7 +92,12 @@ export class MetadataParser {
         this.logger.info(`Cache size set at ${size}`)
     }
 
-
+    /**
+     * Parses the functions in the metadata which are used to create the derived resource
+     * @param metadata The metadata for the derived resource
+     * @param identifier The identifier from the derived resource
+     * @param lookup A lookup function to search the source resources
+     */
     async parse(metadata: RepresentationMetadata,
                 identifier: ResourceIdentifier,
                 lookup: (identifier: ResourceIdentifier,
