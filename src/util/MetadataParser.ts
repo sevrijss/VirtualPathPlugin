@@ -130,11 +130,7 @@ export class MetadataParser {
         const resourceNode = namedNode(identifier.path);
 
         // extract sources to use
-        const sources: ResourceIdentifier[] = store.getQuads(
-            resourceNode,
-            namedNode(SVR.fromResources),
-            null,
-            null)
+        const sources: ResourceIdentifier[] = store.getQuads(resourceNode,namedNode(SVR.fromResources),null,null)
             .map(q => q.object.value)
             .map(iri => ({path: iri}));
 
@@ -210,8 +206,8 @@ export class MetadataParser {
                                     break;
                                 case "process":
                                     (f.content as streamingObject)["process"] = hasInternal ? (arg0:Quad) => Functions[internalName as string](arg0) : async (arg0: Quad) => {
-                                        const quadName = "https://example.com/functions#quad"
-                                        const functionResult = await handler.executeFunction(result, {[`${quadName}`]: arg0,});
+
+                                        const functionResult = await handler.executeFunction(result, {[`${FNS.quad}`]: arg0,});
                                         const outputs = Object.keys(functionResult);
                                         if (outputs.length !== 1) {
                                             throw new InternalServerError("The Processing function must return 1 and only 1 value of type Quad[]")
