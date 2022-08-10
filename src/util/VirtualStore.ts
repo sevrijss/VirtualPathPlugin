@@ -44,18 +44,6 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     }
 
     /**
-     * returns if a given identifier is a derived resource or not
-     * @param name - a relative identifier
-     *
-     * @returns - true if the resource is derived
-     */
-    public async isVirtual(name: string): Promise<boolean> {
-        const res = await this.getRepresentation({path: name}, {type: {[INTERNAL_QUADS]: 1}})
-        return new Store(res.metadata.quads()).has(quad(namedNode(name), namedNode(RDF.type), namedNode(SVR.VirtualSolidResource)));
-        // return Object.keys(this.virtualIdentifiers).includes(this.resolve(name));
-    }
-
-    /**
      * wrapper to resolve urls
      *
      * @param name - relative identifier
@@ -116,7 +104,8 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
     ): Promise<Representation> {
         this.logger.info(identifier.path);
         const result = await this.source.getRepresentation(identifier, preferences, conditions);
-        if (await this.isVirtual(identifier.path)) {
+        const virtual = new Store(result.metadata.quads()).has(quad(namedNode(identifier.path), namedNode(RDF.type), namedNode(SVR.VirtualSolidResource)));
+        if (virtual) {
             // creating the function to execute base on the metadata from the resource
             const f = await this.metadataParser.parse(
                 result.metadata,
