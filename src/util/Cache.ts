@@ -21,9 +21,15 @@ export class Cache<K extends string | number | symbol, V> {
     }
 
     add(key: K, value: V): Cache<K, V> {
-        this.keys[this.counter] = key;
-        this.values[this.counter] = value;
-        this.counter = (this.counter + 1) % this.size;
+        let index;
+        if (this.has(key)) {
+            index = this.keys.indexOf(key);
+        } else {
+            index = this.counter;
+            this.counter = (this.counter + 1) % this.size;
+        }
+        this.keys[index] = key;
+        this.values[index] = value;
         return this;
     }
 
@@ -36,7 +42,7 @@ export class Cache<K extends string | number | symbol, V> {
      * Does not check if key is present, please check with {@link Cache.has}
      * @param key
      */
-    get(key: K):V {
+    get(key: K): V {
         const index = this.keys.indexOf(key);
         return this.values[index];
     }
