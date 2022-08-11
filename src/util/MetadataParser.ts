@@ -13,7 +13,7 @@ import {
 } from "@solid/community-server";
 import {DOAP, FNO, FNS, SVR, XMLSchema} from "./Vocabulary";
 import {Quad} from "rdf-js";
-import N3, {DataFactory, Store} from "n3";
+import N3, {BlankNode, DataFactory, Store} from "n3";
 import {Functions} from "./Functions";
 import {transformSafelyMultiple} from "./StreamUtils";
 import {FunctionHandler} from "./functionHandlerJS/FunctionHandler";
@@ -63,6 +63,45 @@ export function hashQuad(quad: Quad) {
     return cyrb53([subj, pred, obj, graph].join("_"))
 }
 
+/**
+ * Calculates a hash of the entire store of Quads.
+ * The Blank nodes can change identifiers every time without the actual content changing.
+ * We solve this by collecting every quad related to the blank node and hashing them together.
+ * @param store {@link Store} to hash
+ */
+export function hashStore(store: Store) {
+    const hashes: number[] = []
+    const done: BlankNode[] = []
+    store.getQuads(null, null, null, null).forEach(
+        q => {
+            let blank: BlankNode
+            if (q.subject.termType !== "BlankNode" && q.object.termType !== "BlankNode") {
+                hashes.push(hashQuad(q));
+                return;
+            } else if (q.subject.termType === "BlankNode" && !done.includes(q.subject)) {
+                // quad subject is a blank node
+                blank = q.subject
+            } else if (q.object.termType === "BlankNode" && !done.includes(q.object)) {
+                // quad object is a blank node
+                blank = q.object
+            } else {
+                return;
+            }
+            done.push(blank);
+            const blankSubjects = store.getQuads(blank, null, null, null)
+            const blankObjects = store.getQuads(null, null, blank, null);
+            const hashSubjects = cyrb53(blankSubjects.map(quad => cyrb53([quad.predicate.value, quad.object.value, quad.graph.value].join("_"))).sort().join("_"))
+            const hashObjects = cyrb53(blankObjects.map(quad => cyrb53([quad.subject.value, quad.predicate.value, quad.graph.value].join("_"))).sort().join("_"))
+            return cyrb53([hashSubjects, hashObjects].join("_"))
+        }
+    )
+    return cyrb53(hashes.sort().join("_"))
+}
+
+export function hashQuads(quads: Quad[]) {
+    return hashStore(new Store(quads));
+}
+
 export type processor = ((arg0: Store) => Quad[])
 
 const quadPrefs = {type: {[INTERNAL_QUADS]: 1}};
@@ -110,7 +149,9 @@ export class MetadataParser {
         this.logger.info(name);
 
         // compute a hash from all the quads
-        const hash = cyrb53(metadata.quads().map(q => hashQuad(q)).sort().join("_"))
+        const hash = hashQuads(metadata.quads())
+        console.log(hash);
+
 
         // cache system
         if (this.cache.has(name)) {
@@ -130,7 +171,7 @@ export class MetadataParser {
         const resourceNode = namedNode(identifier.path);
 
         // extract sources to use
-        const sources: ResourceIdentifier[] = store.getQuads(resourceNode,namedNode(SVR.fromResources),null,null)
+        const sources: ResourceIdentifier[] = store.getQuads(resourceNode, namedNode(SVR.fromResources), null, null)
             .map(q => q.object.value)
             .map(iri => ({path: iri}));
 
@@ -205,7 +246,7 @@ export class MetadataParser {
                                     }
                                     break;
                                 case "process":
-                                    (f.content as streamingObject)["process"] = hasInternal ? (arg0:Quad) => Functions[internalName as string](arg0) : async (arg0: Quad) => {
+                                    (f.content as streamingObject)["process"] = hasInternal ? (arg0: Quad) => Functions[internalName as string](arg0) : async (arg0: Quad) => {
 
                                         const functionResult = await handler.executeFunction(result, {[`${FNS.quad}`]: arg0,});
                                         const outputs = Object.keys(functionResult);
@@ -216,7 +257,7 @@ export class MetadataParser {
                                     }
                                     break;
                                 case "end":
-                                    (f.content as streamingObject)["end"] = hasInternal? () => Functions[internalName as string]() : async () => {
+                                    (f.content as streamingObject)["end"] = hasInternal ? () => Functions[internalName as string]() : async () => {
                                         const functionResult = await handler.executeFunction(result, {});
                                         const outputs = Object.keys(functionResult);
                                         if (outputs.length !== 1) {
