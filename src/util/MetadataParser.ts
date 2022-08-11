@@ -54,6 +54,7 @@ export function hashQuad(quad: Quad) {
     let pred: string = quad.predicate.value;
     let obj: string = quad.object.value;
     let graph: string = quad.graph.value;
+    // replace blank identifiers because they change every time (even with same dataset)
     if (quad.subject.termType === "BlankNode") {
         subj = "BLANK";
     }
@@ -193,13 +194,18 @@ export class MetadataParser {
 
         // use the FnO handler to load the functions
         const jsHandler = new JavaScriptHandler();
+        // load each function in the functionhandler
         for (const iri of fns_iris) {
             const result = await handler.getFunction(iri);
+            // get all the mappings
             const mappings = store.getQuads(null, namedNode(FNO.function), namedNode(iri), null)
                 .filter((q: Quad) => store.has(quad(q.subject, namedNode(RDF.type), namedNode(FNO.Mapping))));
             let internalName: string | undefined = undefined
+            // checking all the mappings
             mappings.forEach(mappingQuad => {
+                // get all the implementations for a given mappings
                 store.getQuads(mappingQuad.subject, FNO.implementation, null, null).forEach(implementation => {
+                    // check if there is an internal implementation
                     const hasInternal = store.has(quad(namedNode(implementation.object.value), namedNode(RDF.type), namedNode(SVR.internalImplementation)))
                     if (!hasInternal) {
                         /**
@@ -210,15 +216,20 @@ export class MetadataParser {
                         const f = Function(`return ${functionString}`)()
                         handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
                             fn: f,
+                            // external functions get a higher priority to correct internal implementations if needed
                             priority: 3
                         });
                     }
+                    // if the function is directly used by the virtual route, it's stored in de function object
                     const isUsed = store.has(quad(resourceNode, namedNode(SVR.usesFunction), namedNode(iri)));
                     if (isUsed) {
                         if (streaming) {
+                            // get type (start, process or end)
                             const name = store.getObjects(iri, SVR.streamingFunctionType, null)[0].value;
                             const type = mapper[name];
+
                             if (hasInternal) {
+                                // if there's an internal implementation, load it
                                 const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
                                 if (names.length !== 1) {
                                     throw new InternalServerError(`multiple internal names found for ${iri}`);
@@ -235,6 +246,7 @@ export class MetadataParser {
                             }
                             f.contenttype = "stream";
                             switch (type) {
+                                // load the function in the correct slot of the function object
                                 case "start":
                                     (f.content as streamingObject)["start"] = hasInternal ? () => Functions[internalName as string]() : async () => {
                                         const functionResult = await handler.executeFunction(result, {});
@@ -274,7 +286,7 @@ export class MetadataParser {
                 })
             })
         }
-
+        // returning function to derive the new resource
         if (f.contenttype === "stream") {
             const funcs = f.content as streamingObject
             const returned = async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
@@ -350,6 +362,7 @@ export class MetadataParser {
                     preferences: prefs
                 });
             }
+            // adding to cache
             this.cache.add(identifier.path, {hash, "value": returned})
             return returned
 
