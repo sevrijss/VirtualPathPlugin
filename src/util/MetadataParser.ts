@@ -151,8 +151,6 @@ export class MetadataParser {
 
         // compute a hash from all the quads
         const hash = hashQuads(metadata.quads())
-        console.log(hash);
-
 
         // cache system
         if (this.cache.has(name)) {

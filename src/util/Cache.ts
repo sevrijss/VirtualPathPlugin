@@ -1,3 +1,6 @@
+/**
+ * Cache class
+ */
 export class Cache<K extends string | number | symbol, V> {
 
     private readonly keys: K[];
@@ -16,10 +19,19 @@ export class Cache<K extends string | number | symbol, V> {
         this.values = new Array<V>(size);
     }
 
+    /**
+     * returns the number of slots available in the Cache
+     */
     getSize(): number {
         return this.size;
     }
 
+    /**
+     * Adds a given key-value pair to the cache. If the key already exists,
+     * the existing value is overridden with the new value.
+     * @param key key for the value
+     * @param value value to add in the cache
+     */
     add(key: K, value: V): Cache<K, V> {
         let index;
         if (this.has(key)) {
@@ -33,6 +45,10 @@ export class Cache<K extends string | number | symbol, V> {
         return this;
     }
 
+    /**
+     * checks if the cache has an entry for the given key
+     * @param key key to check
+     */
     has(key: K): boolean {
         return this.keys.includes(key);
     }

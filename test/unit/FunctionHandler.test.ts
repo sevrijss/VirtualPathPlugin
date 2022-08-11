@@ -56,7 +56,6 @@ describe('FunctionHandler tests', () => { // the tests container
             contentType: 'text/turtle',
         });
         const fn = await handler.getFunction(`${prefixes.fns}sum3`);
-        // console.log(fn);
         expect(fn).to.be.not.null;
 
         expect(fn.id).to.equal(`${prefixes.fns}sum3`);

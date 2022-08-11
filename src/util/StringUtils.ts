@@ -1,11 +1,3 @@
-export function rtrim(s: string, char: string | null = "\s") {
-    return s.replace(`/${char}+$/gm`, "");
-}
-
-export function ltrim(s: string, char: string | null = "\s") {
-    return s.replace(`^/${char}+/gm`, "");
-}
-
 /**
  * Hash function source: {@link https://stackoverflow.com/a/52171480/ this stackOverflow Answer}
  * @param str string to hash

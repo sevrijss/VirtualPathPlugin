@@ -117,7 +117,7 @@ export class VirtualStore<T extends ResourceStore = ResourceStore> extends Passt
                 return await f(preferences, conditions)
             } catch (e) {
                 const error = e as Error
-                console.log(error.message)
+                this.logger.error(error.message)
                 throw new InternalServerError(error.message)
             }
         } else return result
