@@ -1,10 +1,12 @@
 import * as $rdf from "rdflib";
 import {Namespace} from "rdflib";
-import ldfetch from "ldfetch";
+//import ldfetch from "ldfetch";
+import rdfDereferencer from "rdf-dereference";
 import {Quad, Term} from "rdf-js";
 import {Writer} from "n3";
 import {Quad_Graph, Quad_Object, Quad_Predicate, Quad_Subject, Term as rdflibTerm} from "rdflib/lib/tf-types";
 import RDFlibDataFactory from "rdflib/lib/factories/rdflib-data-factory";
+import arrayifyStream from "arrayify-stream";
 
 const RDF = Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
 
@@ -57,10 +59,10 @@ export class GraphHandler {
 
     async addGraph(iri: string, localValue: LocalValue | null = null) {
         if (!localValue) {
-            const fetch = new ldfetch({});
-            const triples = (await fetch.get(iri)).triples as Quad[];
+            const data :Quad[] = await arrayifyStream((await rdfDereferencer.dereference(iri)).data)
+
             const writer = new Writer({});
-            writer.addQuads(triples);
+            writer.addQuads(data);
             const writerPromise = new Promise<string>((resolve, reject) => {
                 writer.end((error, result) => {
                     if (error) {

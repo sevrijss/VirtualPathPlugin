@@ -2,3 +2,4 @@ node_modules
 dist
 local-files
 /.idea/
+/package-lock.json
