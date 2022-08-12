@@ -1,5 +1,5 @@
 import {Quad} from "rdf-js";
-import N3, {DataFactory, NamedNode} from "n3";
+import N3, {DataFactory, NamedNode, Store} from "n3";
 import {DBP, FOAF} from "./Vocabulary";
 import {Age} from "../example/Age";
 
@@ -39,6 +39,17 @@ export const Functions: Record<string, Function> = {
             out.push(data);
         }
         return out
-    }
+    },
+    "age": (store: Store) => {
+        const out: Quad[] = []
+        store.getQuads(null, DBP.birthDate, null, null).forEach((data: Quad) => {
+            out.push(quad(
+                data.subject,
+                namedNode("http://dbpedia.org/ontology/age"),
+                literal(yearsPassed(new Date(data.object.value))),
+            ));
+        });
+        return out
+    },
 }
 

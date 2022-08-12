@@ -31,6 +31,7 @@ export class Cache<K extends string | number | symbol, V> {
      * the existing value is overridden with the new value.
      * @param key key for the value
      * @param value value to add in the cache
+     * @returns {@link Cache} for chained operations
      */
     add(key: K, value: V): Cache<K, V> {
         let index;
@@ -55,7 +56,7 @@ export class Cache<K extends string | number | symbol, V> {
 
     /**
      * Gets a value associated to a key.
-     * Does not check if key is present, please check with {@link Cache.has}
+     * Does not check if key is present, please check with {@link Cache.has()}
      * @param key
      */
     get(key: K): V {

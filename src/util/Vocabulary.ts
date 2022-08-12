@@ -50,7 +50,8 @@ export const FNO = createUriAndTermNamespace("https://w3id.org/function/ontology
 );
 
 export const FNS = createUriAndTermNamespace("https://example.com/functions#",
-    "quad"
+    "quad",
+    "Store"
 )
 
 export const XMLSchema = createUriAndTermNamespace("http://www.w3.org/2001/XMLSchema#",

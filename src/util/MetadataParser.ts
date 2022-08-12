@@ -96,14 +96,14 @@ export function hashStore(store: Store) {
             return cyrb53([hashSubjects, hashObjects].join("_"))
         }
     )
-    return cyrb53(hashes.sort().join("_"))
+    return cyrb53(hashes.sort().join("_"));
 }
 
 export function hashQuads(quads: Quad[]) {
     return hashStore(new Store(quads));
 }
 
-export type processor = ((arg0: Store) => Quad[])
+export type processor = ((arg0: Store) => Promise<Quad[]>)
 
 const quadPrefs = {type: {[INTERNAL_QUADS]: 1}};
 const {namedNode, literal, quad} = DataFactory;
@@ -155,8 +155,13 @@ export class MetadataParser {
         // cache system
         if (this.cache.has(name)) {
             const cached = this.cache.get(name);
-            this.logger.info("returning cached function");
-            return cached.value;
+
+            if (cached.hash === hash) {
+                this.logger.info("returning cached function");
+                return cached.value;
+            } else {
+                this.logger.info("cache found, but hash was different");
+            }
         } else {
             this.logger.info("no up-to-date cache found");
         }
@@ -187,12 +192,12 @@ export class MetadataParser {
                 "start": undefined,
                 "process": (q: Quad) => new Promise(() => []),
                 "end": undefined
-            } : ((s: Store) => [])
+            } : ((s: Store) => new Promise(() => []))
         }
 
         // use the FnO handler to load the functions
         const jsHandler = new JavaScriptHandler();
-        // load each function in the functionhandler
+        // load each function in the function handler
         for (const iri of fns_iris) {
             const result = await handler.getFunction(iri);
             // get all the mappings
@@ -279,6 +284,33 @@ export class MetadataParser {
                                 default:
                                     throw new InternalServerError("The server encountered an impossible state");
                             }
+                        } else {
+                            f.contenttype = "store";
+                            if (hasInternal) {
+                                // if there's an internal implementation, load it
+                                const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
+                                if (names.length > 1) {
+                                    throw new InternalServerError(`multiple internal names found for ${iri}`);
+                                } else if (names.length < 1) {
+                                    throw new InternalServerError(`no internal name found for ${iri}`)
+                                }
+                                internalName = names[0].object.value;
+                                const func = Functions[internalName]
+                                if (!func) {
+                                    throw new InternalServerError(`no internal function found for ${iri} with name ${internalName}`)
+                                }
+                                f.content = func as processor;
+                            } else {
+                                f.content = async (arg0: Store) => {
+
+                                    const functionResult = await handler.executeFunction(result, {[`${FNS.Store}`]: arg0,});
+                                    const outputs = Object.keys(functionResult);
+                                    if (outputs.length !== 1) {
+                                        throw new InternalServerError("The Processing function must return 1 and only 1 value of type Quad[]")
+                                    }
+                                    return functionResult[outputs[0]] as Quad[]
+                                }
+                            }
                         }
                     }
                 })
@@ -345,8 +377,8 @@ export class MetadataParser {
                             store.add(data)
                         }
                     },
-                    flush() {
-                        const result = func(store)
+                    async flush() {
+                        const result = await func(store)
                         for (const val of result) {
                             this.push(val)
                         }
