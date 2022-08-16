@@ -1,3 +1,4 @@
+import * as CSS from "@solid/community-server";
 import {
     BasicRepresentation,
     Conditions,
@@ -11,6 +12,7 @@ import {
     RepresentationPreferences,
     ResourceIdentifier
 } from "@solid/community-server";
+import * as vocabulary from "./Vocabulary";
 import {DOAP, FNO, FNS, SVR, XMLSchema} from "./Vocabulary";
 import {Quad} from "rdf-js";
 import N3, {BlankNode, DataFactory, Store} from "n3";
@@ -111,6 +113,15 @@ export type CacheRecord = {
     "hash": number,
     "value": (prefs: RepresentationPreferences, cond: (Conditions | undefined)) => Promise<Representation>
 }
+
+/**
+ * Modules object containing modules for basic quad processing.
+ * Contains:
+ *  - N3
+ *  - Community Solid Server
+ *  - Vocabulary defined in {@link vocabulary}
+ */
+const modules = {N3: N3, CSS: CSS, vocabulary: vocabulary}
 
 /**
  * Class to parse the metadata that belongs to a virtual resource.
@@ -215,10 +226,13 @@ export class MetadataParser {
                          * TODO: if remote function "collection" gets implemented, it should be used here.
                          * Currently the function is created from a string in de rdf file, using the `Function` constructor
                          */
+                            // TODO sandbox via {@link https://stackoverflow.com/a/55056012/}
                         let functionString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
                         const f = Function(`return ${functionString}`)()
+
                         handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
-                            fn: f,
+                            // inject a `modules` argument containing modules for basic quad operations
+                            fn: (store: Store) => f(store, modules),
                             // external functions get a higher priority to correct internal implementations if needed
                             priority: 3
                         });
@@ -306,7 +320,8 @@ export class MetadataParser {
                                     const functionResult = await handler.executeFunction(result, {[`${FNS.Store}`]: arg0,});
                                     const outputs = Object.keys(functionResult);
                                     if (outputs.length !== 1) {
-                                        throw new InternalServerError("The Processing function must return 1 and only 1 value of type Quad[]")
+                                        console.log(outputs);
+                                        throw new InternalServerError("The function must return 1 and only 1 value of type Quad[]")
                                     }
                                     return functionResult[outputs[0]] as Quad[]
                                 }
