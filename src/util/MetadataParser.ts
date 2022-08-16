@@ -255,11 +255,11 @@ export class MetadataParser {
                         if (streaming) {
                             f.contenttype = "stream";
                             let type;
-                            if(store.has(quad(namedNode(iri),namedNode(RDF.type), namedNode(SVR.StartFunction)))){
+                            if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.StartFunction)))) {
                                 type = "start"
-                            } else if(store.has(quad(namedNode(iri),namedNode(RDF.type), namedNode(SVR.ProcessFunction)))){
+                            } else if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.ProcessFunction)))) {
                                 type = "process"
-                            } else if(store.has(quad(namedNode(iri),namedNode(RDF.type), namedNode(SVR.EndFunction)))){
+                            } else if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.EndFunction)))) {
                                 type = "end"
                             } else {
                                 throw new InternalServerError("something went wrong while parsing the function metadata");
@@ -349,85 +349,116 @@ export class MetadataParser {
         }
         // returning function to derive the new resource
         if (f.contenttype === "stream") {
-            const funcs = f.content as streamingObject
-            const returned = async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
-                const data = []
-                const dupes: Store = new Store()
-                for (const source of sources) {
-                    const input = await lookup(source, quadPrefs)
-                    data.push(input.data)
-                }
-                if (funcs.start) {
-                    await funcs.start();
-                }
-                // Utility function derived from CSS, will make your life much easier
-                const transformedStream = transformSafelyMultiple(data, {
-                    async transform(data: Quad): Promise<void> {
-                        for (const val of await funcs.process(data)) {
-                            if (!dupes.has(val)) {
-                                this.push(val)
-                                dupes.add(val);
-                            }
-                        }
-                    },
-                    async flush(): Promise<void> {
-                        if (funcs.end) {
-                            for (const r of await funcs.end()) {
-                                if (!dupes.has(r)) {
-                                    this.push(r);
-                                    dupes.add(r);
-                                }
-                            }
-                        }
-                    },
-                    objectMode: true,
-                });
-
-                return await this.converter.handle({
-                    representation: new BasicRepresentation(transformedStream, INTERNAL_QUADS),
-                    identifier: {path: name},
-                    preferences: prefs
-                });
-            }
+            const returned = this.createDerivedStreaming(
+                name,
+                sources,
+                f.content as streamingObject,
+                lookup)
             this.cache.add(identifier.path, {hash, "value": returned})
             return returned
         } else if (f.contenttype === "store") {
             const func = f.content as processor;
-            const returned = async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
-                const store = new Store();
-                const data = []
-                for (const source of sources) {
-                    const input = await lookup(source, quadPrefs)
-                    data.push(input.data)
-                }
-
-                // Utility function derived from CSS, will make your life much easier
-                const transformedStream = transformSafelyMultiple(data, {
-                    transform(data: Quad): void {
-                        if (!store.has(data)) {
-                            store.add(data)
-                        }
-                    },
-                    async flush() {
-                        const result = await func(store)
-                        for (const val of result) {
-                            this.push(val)
-                        }
-                    },
-                    objectMode: true,
-                });
-                const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
-                return await this.converter.handle({
-                    representation: out,
-                    identifier: {path: name},
-                    preferences: prefs
-                });
-            }
+            const returned = this.createDerived(
+                name,
+                sources,
+                f.content as processor,
+                lookup
+            )
             // adding to cache
             this.cache.add(identifier.path, {hash, "value": returned})
             return returned
 
         } else throw new InternalServerError("Error in metadata");
 
+    }
+
+    private createDerivedStreaming(
+        name: string,
+        sources: ResourceIdentifier[],
+        funcs: streamingObject,
+        lookup: (identifier: ResourceIdentifier,
+                 preferences: RepresentationPreferences,
+                 conditions?: Conditions,
+        ) => Promise<Representation>) {
+        return async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
+            const data = []
+            const dupes: Store = new Store()
+            for (const source of sources) {
+                const input = await lookup(source, quadPrefs)
+                data.push(input.data)
+            }
+            if (funcs.start) {
+                await funcs.start();
+            }
+            // Utility function derived from CSS, will make your life much easier
+            const transformedStream = transformSafelyMultiple(data, {
+                async transform(data: Quad): Promise<void> {
+                    for (const val of await funcs.process(data)) {
+                        if (!dupes.has(val)) {
+                            this.push(val)
+                            dupes.add(val);
+                        }
+                    }
+                },
+                async flush(): Promise<void> {
+                    if (funcs.end) {
+                        for (const r of await funcs.end()) {
+                            if (!dupes.has(r)) {
+                                this.push(r);
+                                dupes.add(r);
+                            }
+                        }
+                    }
+                },
+                objectMode: true,
+            });
+
+            return await this.converter.handle({
+                representation: new BasicRepresentation(transformedStream, INTERNAL_QUADS),
+                identifier: {path: name},
+                preferences: prefs
+            });
+        }
+
+    }
+
+    private createDerived(
+        name:string,
+        sources: ResourceIdentifier[],
+        func: processor,
+        lookup: (identifier: ResourceIdentifier,
+                 preferences: RepresentationPreferences,
+                 conditions?: Conditions,
+        ) => Promise<Representation>){
+        return async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
+            const store = new Store();
+            const data = []
+            for (const source of sources) {
+                const input = await lookup(source, quadPrefs)
+                data.push(input.data)
+            }
+
+            // Utility function derived from CSS, will make your life much easier
+            const transformedStream = transformSafelyMultiple(data, {
+                transform(data: Quad): void {
+                    if (!store.has(data)) {
+                        store.add(data)
+                    }
+                },
+                async flush() {
+                    const result = await func(store)
+                    for (const val of result) {
+                        this.push(val)
+                    }
+                },
+                objectMode: true,
+            });
+            const out = new BasicRepresentation(transformedStream, INTERNAL_QUADS);
+            return await this.converter.handle({
+                representation: out,
+                identifier: {path: name},
+                preferences: prefs
+            });
+        }
     }
 }
