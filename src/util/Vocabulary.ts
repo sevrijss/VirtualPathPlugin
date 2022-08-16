@@ -36,6 +36,9 @@ export const SVR = createUriAndTermNamespace("https://example.com/ns/SolidVirtua
     "Start",
     "Process",
     "End",
+    "StartFunction",
+    "ProcessFunction",
+    "EndFunction",
 );
 
 export const FNO = createUriAndTermNamespace("https://w3id.org/function/ontology#",

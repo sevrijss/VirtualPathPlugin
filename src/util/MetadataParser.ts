@@ -29,10 +29,6 @@ export type streamingObject = {
     "end": (() => Promise<Quad[]>) | undefined
 }
 export type FunctionLib = { contenttype: "stream" | "store", content: streamingObject | processor }
-export const mapper: Record<string, "start" | "process" | "end" | undefined> = {}
-mapper[SVR.Start] = "start"
-mapper[SVR.Process] = "process"
-mapper[SVR.End] = "end"
 
 /**
  * Has a major collision problem when used with blank nodes
@@ -257,27 +253,31 @@ export class MetadataParser {
                     const isUsed = store.has(quad(resourceNode, namedNode(SVR.usesFunction), namedNode(iri)));
                     if (isUsed) {
                         if (streaming) {
-                            // get type (start, process or end)
-                            const name = store.getObjects(iri, SVR.streamingFunctionType, null)[0].value;
-                            const type = mapper[name];
+                            f.contenttype = "stream";
+                            let type;
+                            if(store.has(quad(namedNode(iri),namedNode(RDF.type), namedNode(SVR.StartFunction)))){
+                                type = "start"
+                            } else if(store.has(quad(namedNode(iri),namedNode(RDF.type), namedNode(SVR.ProcessFunction)))){
+                                type = "process"
+                            } else if(store.has(quad(namedNode(iri),namedNode(RDF.type), namedNode(SVR.EndFunction)))){
+                                type = "end"
+                            } else {
+                                throw new InternalServerError("something went wrong while parsing the function metadata");
+                            }
 
                             if (hasInternal) {
                                 // if there's an internal implementation, load it
                                 const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
                                 if (names.length !== 1) {
-                                    throw new InternalServerError(`multiple internal names found for ${iri}`);
+                                    throw new InternalServerError(names.length !== 0 ? `multiple internal names found for ${iri}` : `No internal name found for ${iri}`);
                                 }
                                 internalName = names[0].object.value;
                                 const func = Functions[internalName]
                                 if (!func) {
                                     throw new InternalServerError(`no internal function found for ${iri} with name ${names[0].object.value}`)
                                 }
+                            }
 
-                            }
-                            if (!type) {
-                                throw new InternalServerError("something went wrong while parsing the function metadata");
-                            }
-                            f.contenttype = "stream";
                             switch (type) {
                                 // load the function in the correct slot of the function object
                                 case "start":
