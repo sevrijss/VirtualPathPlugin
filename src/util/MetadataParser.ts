@@ -13,7 +13,7 @@ import {
     ResourceIdentifier
 } from "@solid/community-server";
 import * as vocabulary from "./Vocabulary";
-import {DOAP, FNO, FNS, SVR, XMLSchema} from "./Vocabulary";
+import {DOAP, FNO, FNOI, FNS, SVR, XMLSchema} from "./Vocabulary";
 import {Quad} from "rdf-js";
 import N3, {BlankNode, DataFactory, Store} from "n3";
 import {Functions} from "./Functions";
@@ -224,18 +224,34 @@ export class MetadataParser {
                     if (!hasInternal) {
                         /**
                          * TODO: if remote function "collection" gets implemented, it should be used here.
-                         * Currently the function is created from a string in de rdf file, using the `Function` constructor
+                         * Currently the function is created from a string in de rdf file.
                          */
-                            // TODO sandbox via {@link https://stackoverflow.com/a/55056012/}
-                        let functionString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
-                        const f = Function(`return ${functionString}`)()
+                        /**
+                         * TODO sandbox
+                         *
+                         * For security reasons, you probably don't want the user input polluting you environment.
+                         * One way of preventing this could be via {@link https://stackoverflow.com/a/55056012/ a VM}
+                         * ({@link https://nodejs.org/api/vm.html docs}), but then there should be restrictions on
+                         * the 'main' function name, to have an entry point. (like the `main` function in C)
+                         */
 
-                        handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
-                            // inject a `modules` argument containing modules for basic quad operations
-                            fn: (store: Store) => f(store, modules),
-                            // external functions get a higher priority to correct internal implementations if needed
-                            priority: 3
-                        });
+                        if (store.has(quad(
+                            namedNode(implementation.object.value),
+                            namedNode(RDF.type),
+                            namedNode(FNOI.JavaScriptImplementation)
+                        ))) {
+                            let functionString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
+                            const f = Function(`return ${functionString}`)()
+
+                            handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
+                                // inject a `modules` argument containing modules for basic quad operations
+                                fn: (store: Store) => f(store, modules),
+                                // external functions get a higher priority to correct internal implementations if needed
+                                priority: 3
+                            });
+                        } else {
+                            throw new InternalServerError("There is currently no support for external, non-javascript implementations");
+                        }
                     }
                     // if the function is directly used by the virtual route, it's stored in de function object
                     const isUsed = store.has(quad(resourceNode, namedNode(SVR.usesFunction), namedNode(iri)));

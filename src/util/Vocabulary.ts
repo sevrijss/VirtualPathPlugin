@@ -61,3 +61,7 @@ export const XMLSchema = createUriAndTermNamespace("http://www.w3.org/2001/XMLSc
 export const DOAP = createUriAndTermNamespace("http://usefulinc.com/ns/doap#",
     "name",
 );
+
+export const FNOI = createUriAndTermNamespace("https://w3id.org/function/vocabulary/implementation#",
+    "JavaScriptImplementation"
+);
