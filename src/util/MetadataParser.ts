@@ -208,6 +208,7 @@ export class MetadataParser {
         const jsHandler = new JavaScriptHandler();
         // load each function in the function handler
         for (const iri of fns_iris) {
+            console.log(iri);
             const result = await handler.getFunction(iri);
             // get all the mappings
             const mappings = store.getQuads(null, namedNode(FNO.function), namedNode(iri), null)
@@ -215,10 +216,12 @@ export class MetadataParser {
             let internalName: string | undefined = undefined
             // checking all the mappings
             mappings.forEach(mappingQuad => {
+                    console.log(mappingQuad);
                     // get all the implementations for a given mappings
                     store.getQuads(mappingQuad.subject, FNO.implementation, null, null).forEach(implementation => {
                         // check if there is an internal implementation
                         const hasInternal = store.has(quad(namedNode(implementation.object.value), namedNode(RDF.type), namedNode(SVR.internalImplementation)))
+                        console.log(`hasInternal:\t${hasInternal}`);
                         if (!hasInternal) {
                             /**
                              * TODO: if remote function "collection" gets implemented, it should be used here.
@@ -238,12 +241,13 @@ export class MetadataParser {
                                 namedNode(RDF.type),
                                 namedNode(FNOI.JavaScriptImplementation)
                             ))) {
+                                console.log(`jsimpl:\tTRUE`);
                                 let functionString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
                                 const f = Function(`return ${functionString}`)()
 
                                 handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
                                     // inject a `modules` argument containing modules for basic quad operations
-                                    fn: (store: Store) => f(store, modules),
+                                    fn: async (store: Store) => await f(store, modules),
                                     // external functions get a higher priority to correct internal implementations if needed
                                     priority: 3
                                 });
@@ -278,6 +282,7 @@ export class MetadataParser {
                         }
                         // if the function is directly used by the virtual route, it's stored in de function object
                         const isUsed = store.has(quad(resourceNode, namedNode(SVR.usesFunction), namedNode(iri)));
+                        console.log(`isUsed:\t${isUsed}`);
                         if (isUsed) {
                             console.log(`${iri} is used`)
                             if (streaming) {
