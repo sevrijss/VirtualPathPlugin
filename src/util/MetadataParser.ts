@@ -15,13 +15,15 @@ import {
 import * as vocabulary from "./Vocabulary";
 import {DOAP, FNO, FNOI, FNS, SVR, XMLSchema} from "./Vocabulary";
 import {Quad} from "rdf-js";
-import N3, {BlankNode, DataFactory, Store} from "n3";
+import N3, {BlankNode, DataFactory, Quad_Object, Quad_Predicate, Quad_Subject, Store} from "n3";
 import {Functions} from "./Functions";
 import {transformSafelyMultiple} from "./StreamUtils";
 import {FunctionHandler} from "./functionHandlerJS/FunctionHandler";
 import {JavaScriptHandler} from "./functionHandlerJS/handlers/JavaScriptHandler";
 import {cyrb53} from "./StringUtils";
 import {Cache} from "./Cache";
+import {QueryEngine} from "@comunica/query-sparql-rdfjs";
+import arrayifyStream from "arrayify-stream";
 
 export type streamingObject = {
     "start": (() => Promise<void>) | undefined,
@@ -213,140 +215,172 @@ export class MetadataParser {
             let internalName: string | undefined = undefined
             // checking all the mappings
             mappings.forEach(mappingQuad => {
-                // get all the implementations for a given mappings
-                store.getQuads(mappingQuad.subject, FNO.implementation, null, null).forEach(implementation => {
-                    // check if there is an internal implementation
-                    const hasInternal = store.has(quad(namedNode(implementation.object.value), namedNode(RDF.type), namedNode(SVR.internalImplementation)))
-                    if (!hasInternal) {
-                        /**
-                         * TODO: if remote function "collection" gets implemented, it should be used here.
-                         * Currently the function is created from a string in de rdf file.
-                         */
-                        /**
-                         * TODO sandbox
-                         *
-                         * For security reasons, you probably don't want the user input polluting you environment.
-                         * One way of preventing this could be via {@link https://stackoverflow.com/a/55056012/ a VM}
-                         * ({@link https://nodejs.org/api/vm.html docs}), but then there should be restrictions on
-                         * the 'main' function name, to have an entry point. (like the `main` function in C)
-                         */
+                    // get all the implementations for a given mappings
+                    store.getQuads(mappingQuad.subject, FNO.implementation, null, null).forEach(implementation => {
+                        // check if there is an internal implementation
+                        const hasInternal = store.has(quad(namedNode(implementation.object.value), namedNode(RDF.type), namedNode(SVR.internalImplementation)))
+                        if (!hasInternal) {
+                            /**
+                             * TODO: if remote function "collection" gets implemented, it should be used here.
+                             * Currently the function is created from a string in de rdf file.
+                             */
+                            /**
+                             * TODO sandbox
+                             *
+                             * For security reasons, you probably don't want the user input polluting you environment.
+                             * One way of preventing this could be via {@link https://stackoverflow.com/a/55056012/ a VM}
+                             * ({@link https://nodejs.org/api/vm.html docs}), but then there should be restrictions on
+                             * the 'main' function name, to have an entry point. (like the `main` function in C)
+                             */
 
-                        if (store.has(quad(
-                            namedNode(implementation.object.value),
-                            namedNode(RDF.type),
-                            namedNode(FNOI.JavaScriptImplementation)
-                        ))) {
-                            let functionString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
-                            const f = Function(`return ${functionString}`)()
+                            if (store.has(quad(
+                                namedNode(implementation.object.value),
+                                namedNode(RDF.type),
+                                namedNode(FNOI.JavaScriptImplementation)
+                            ))) {
+                                let functionString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
+                                const f = Function(`return ${functionString}`)()
 
-                            handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
-                                // inject a `modules` argument containing modules for basic quad operations
-                                fn: (store: Store) => f(store, modules),
-                                // external functions get a higher priority to correct internal implementations if needed
-                                priority: 3
-                            });
-                        } else {
-                            throw new InternalServerError("There is currently no support for external, non-javascript implementations");
-                        }
-                    }
-                    // if the function is directly used by the virtual route, it's stored in de function object
-                    const isUsed = store.has(quad(resourceNode, namedNode(SVR.usesFunction), namedNode(iri)));
-                    if (isUsed) {
-                        if (streaming) {
-                            f.contenttype = "stream";
-                            let type;
-                            if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.StartFunction)))) {
-                                type = "start"
-                            } else if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.ProcessFunction)))) {
-                                type = "process"
-                            } else if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.EndFunction)))) {
-                                type = "end"
-                            } else {
-                                throw new InternalServerError("something went wrong while parsing the function metadata");
-                            }
+                                handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
+                                    // inject a `modules` argument containing modules for basic quad operations
+                                    fn: (store: Store) => f(store, modules),
+                                    // external functions get a higher priority to correct internal implementations if needed
+                                    priority: 3
+                                });
+                            } else if (store.has(quad(
+                                namedNode(implementation.object.value),
+                                namedNode(RDF.type),
+                                namedNode(FNOI.SparqlImplementation)
+                            ))) {
+                                let sparqlString = store.getObjects(implementation.object, SVR.literalImplementation, null)[0].value;
 
-                            if (hasInternal) {
-                                // if there's an internal implementation, load it
-                                const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
-                                if (names.length !== 1) {
-                                    throw new InternalServerError(names.length !== 0 ? `multiple internal names found for ${iri}` : `No internal name found for ${iri}`);
-                                }
-                                internalName = names[0].object.value;
-                                const func = Functions[internalName]
-                                if (!func) {
-                                    throw new InternalServerError(`no internal function found for ${iri} with name ${names[0].object.value}`)
-                                }
-                            }
-
-                            switch (type) {
-                                // load the function in the correct slot of the function object
-                                case "start":
-                                    (f.content as streamingObject)["start"] = hasInternal ? () => Functions[internalName as string]() : async () => {
-                                        const functionResult = await handler.executeFunction(result, {});
-                                        const outputs = Object.keys(functionResult);
-                                        if (outputs.length !== 0) {
-                                            this.logger.warn("Start function has outputs. They are ignored");
-                                        }
-                                        return;
+                                handler.implementationHandler.loadImplementation(implementation.object.value, jsHandler, {
+                                        // inject a `modules` argument containing modules for basic quad operations
+                                        fn: async (store: Store) => {
+                                            const myEngine = new QueryEngine();
+                                            const stream = await myEngine.queryBindings(sparqlString, {sources: [store]});
+                                            const data = await arrayifyStream(stream.map((binding) => {
+                                                const subj = binding.get("s") as Quad_Subject;
+                                                const pred = binding.get("p") as Quad_Predicate;
+                                                const obj = binding.get("o") as Quad_Object;
+                                                return quad(subj, pred, obj)
+                                            }))
+                                            console.log(data);
+                                            return data;
+                                        },
+                                        // external functions get a higher priority to correct internal implementations if needed
+                                        priority: 3
                                     }
-                                    break;
-                                case "process":
-                                    (f.content as streamingObject)["process"] = hasInternal ? (arg0: Quad) => Functions[internalName as string](arg0) : async (arg0: Quad) => {
+                                );
+                            } else {
+                                throw new InternalServerError("There is currently no support for external, non-javascript implementations");
+                            }
+                        }
+                        // if the function is directly used by the virtual route, it's stored in de function object
+                        const isUsed = store.has(quad(resourceNode, namedNode(SVR.usesFunction), namedNode(iri)));
+                        if (isUsed) {
+                            console.log(`${iri} is used`)
+                            if (streaming) {
+                                console.log(`${iri} is streaming`)
+                                f.contenttype = "stream";
+                                let type;
+                                if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.StartFunction)))) {
+                                    type = "start"
+                                } else if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.ProcessFunction)))) {
+                                    type = "process"
+                                } else if (store.has(quad(namedNode(iri), namedNode(RDF.type), namedNode(SVR.EndFunction)))) {
+                                    type = "end"
+                                } else {
+                                    throw new InternalServerError("something went wrong while parsing the function metadata");
+                                }
 
-                                        const functionResult = await handler.executeFunction(result, {[`${FNS.quad}`]: arg0,});
+                                if (hasInternal) {
+                                    // if there's an internal implementation, load it
+                                    const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
+                                    if (names.length !== 1) {
+                                        throw new InternalServerError(names.length !== 0 ? `multiple internal names found for ${iri}` : `No internal name found for ${iri}`);
+                                    }
+                                    internalName = names[0].object.value;
+                                    const func = Functions[internalName]
+                                    if (!func) {
+                                        throw new InternalServerError(`no internal function found for ${iri} with name ${names[0].object.value}`)
+                                    }
+                                }
+
+                                switch (type) {
+                                    // load the function in the correct slot of the function object
+                                    case "start":
+                                        (f.content as streamingObject)["start"] = hasInternal ? () => Functions[internalName as string]() : async () => {
+                                            const functionResult = await handler.executeFunction(result, {});
+                                            const outputs = Object.keys(functionResult);
+                                            if (outputs.length !== 0) {
+                                                this.logger.warn("Start function has outputs. They are ignored");
+                                            }
+                                            return;
+                                        }
+                                        break;
+                                    case "process":
+                                        (f.content as streamingObject)["process"] = hasInternal ? (arg0: Quad) => Functions[internalName as string](arg0) : async (arg0: Quad) => {
+
+                                            const functionResult = await handler.executeFunction(result, {[`${FNS.quad}`]: arg0,});
+                                            const outputs = Object.keys(functionResult);
+                                            if (outputs.length !== 1) {
+                                                throw new InternalServerError("The Processing function must return 1 and only 1 value of type Quad[]")
+                                            }
+                                            return functionResult[outputs[0]] as Quad[]
+                                        }
+                                        break;
+                                    case "end":
+                                        (f.content as streamingObject)["end"] = hasInternal ? () => Functions[internalName as string]() : async () => {
+                                            const functionResult = await handler.executeFunction(result, {});
+                                            const outputs = Object.keys(functionResult);
+                                            if (outputs.length !== 1) {
+                                                throw new InternalServerError("The End function must return 1 and only 1 value of type Quad[]")
+                                            }
+                                            return functionResult[outputs[0]] as Quad[]
+                                        }
+                                        break;
+                                    default:
+                                        throw new InternalServerError("The server encountered an impossible state");
+                                }
+                            } else {
+                                console.log(`${iri} is not streaming`)
+                                f.contenttype = "store";
+                                if (hasInternal) {
+                                    console.log(`${iri} has internal`)
+                                    // if there's an internal implementation, load it
+                                    const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
+                                    if (names.length > 1) {
+                                        throw new InternalServerError(`multiple internal names found for ${iri}`);
+                                    } else if (names.length < 1) {
+                                        throw new InternalServerError(`no internal name found for ${iri}`)
+                                    }
+                                    internalName = names[0].object.value;
+                                    const func = Functions[internalName]
+                                    if (!func) {
+                                        throw new InternalServerError(`no internal function found for ${iri} with name ${internalName}`)
+                                    }
+                                    f.content = func as processor;
+                                } else {
+                                    console.log(`${iri} has no internal`)
+                                    f.content = async (arg0: Store) => {
+
+                                        const functionResult = await handler.executeFunction(result, {[`${FNS.Store}`]: arg0,});
                                         const outputs = Object.keys(functionResult);
                                         if (outputs.length !== 1) {
-                                            throw new InternalServerError("The Processing function must return 1 and only 1 value of type Quad[]")
+                                            console.log(outputs);
+                                            throw new InternalServerError("The function must return 1 and only 1 value of type Quad[]")
                                         }
                                         return functionResult[outputs[0]] as Quad[]
                                     }
-                                    break;
-                                case "end":
-                                    (f.content as streamingObject)["end"] = hasInternal ? () => Functions[internalName as string]() : async () => {
-                                        const functionResult = await handler.executeFunction(result, {});
-                                        const outputs = Object.keys(functionResult);
-                                        if (outputs.length !== 1) {
-                                            throw new InternalServerError("The End function must return 1 and only 1 value of type Quad[]")
-                                        }
-                                        return functionResult[outputs[0]] as Quad[]
-                                    }
-                                    break;
-                                default:
-                                    throw new InternalServerError("The server encountered an impossible state");
-                            }
-                        } else {
-                            f.contenttype = "store";
-                            if (hasInternal) {
-                                // if there's an internal implementation, load it
-                                const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
-                                if (names.length > 1) {
-                                    throw new InternalServerError(`multiple internal names found for ${iri}`);
-                                } else if (names.length < 1) {
-                                    throw new InternalServerError(`no internal name found for ${iri}`)
-                                }
-                                internalName = names[0].object.value;
-                                const func = Functions[internalName]
-                                if (!func) {
-                                    throw new InternalServerError(`no internal function found for ${iri} with name ${internalName}`)
-                                }
-                                f.content = func as processor;
-                            } else {
-                                f.content = async (arg0: Store) => {
-
-                                    const functionResult = await handler.executeFunction(result, {[`${FNS.Store}`]: arg0,});
-                                    const outputs = Object.keys(functionResult);
-                                    if (outputs.length !== 1) {
-                                        console.log(outputs);
-                                        throw new InternalServerError("The function must return 1 and only 1 value of type Quad[]")
-                                    }
-                                    return functionResult[outputs[0]] as Quad[]
                                 }
                             }
                         }
-                    }
-                })
-            })
+                    })
+                }
+            )
         }
+
         // returning function to derive the new resource
         if (f.contenttype === "stream") {
             const returned = this.createDerivedStreaming(
@@ -354,7 +388,9 @@ export class MetadataParser {
                 sources,
                 f.content as streamingObject,
                 lookup)
-            this.cache.add(identifier.path, {hash, "value": returned})
+            this.cache.add(identifier.path, {
+                hash, "value": returned
+            })
             return returned
         } else if (f.contenttype === "store") {
             const returned = this.createDerived(
@@ -377,8 +413,8 @@ export class MetadataParser {
         funcs: streamingObject,
         lookup: (identifier: ResourceIdentifier,
                  preferences: RepresentationPreferences,
-                 conditions?: Conditions,
-        ) => Promise<Representation>) {
+                 conditions?: Conditions) => Promise<Representation>
+    ) {
         return async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
             const data = []
             const dupes: Store = new Store()
@@ -421,14 +457,14 @@ export class MetadataParser {
 
     }
 
-    private createDerived(
-        name:string,
-        sources: ResourceIdentifier[],
-        func: processor,
-        lookup: (identifier: ResourceIdentifier,
-                 preferences: RepresentationPreferences,
-                 conditions?: Conditions,
-        ) => Promise<Representation>){
+    private createDerived(name: string,
+                          sources: ResourceIdentifier[],
+                          func: processor,
+                          lookup:
+                              (identifier: ResourceIdentifier,
+                               preferences: RepresentationPreferences,
+                               conditions?: Conditions) => Promise<Representation>
+    ) {
         return async (prefs: RepresentationPreferences, cond: Conditions | undefined): Promise<Representation> => {
             const store = new Store();
             const data = []

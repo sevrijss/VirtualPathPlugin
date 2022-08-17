@@ -66,5 +66,6 @@ export const DOAP = createUriAndTermNamespace("http://usefulinc.com/ns/doap#",
 );
 
 export const FNOI = createUriAndTermNamespace("https://w3id.org/function/vocabulary/implementation#",
-    "JavaScriptImplementation"
+    "JavaScriptImplementation",
+    "SparqlImplementation",
 );
