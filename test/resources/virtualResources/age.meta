@@ -1,0 +1,95 @@
+@prefix svr: <https://example.com/ns/SolidVirtualResource#> .
+@prefix fns: <https://example.com/functions#> .
+@prefix fno: <https://w3id.org/function/ontology#> .
+@prefix fnoi: <https://w3id.org/function/vocabulary/implementation#> .
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix fnom: <https://w3id.org/function/vocabulary/mapping#> .   
+
+# ========== Resource Information ========== #
+<> a svr:VirtualSolidResource ; # ex:VirtualSolidResource specifies that the resource under this path should be derived from other resources
+  svr:fromResources </card.ttl> ; # ex:fromResources provides the link to the base resource(s) from which the virtual resource is derived
+  svr:usesFunction fns:age_start ; # ex:usesFunctions provides the link to the (FnO) function that is used to process the original data
+  svr:usesFunction fns:age_process ; # ex:usesFunctions provides the link to the (FnO) function that is used to process the original data
+  svr:usesFunction fns:age_end ; # ex:usesFunctions provides the link to the (FnO) function that is used to process the original data
+  svr:takesOutput fns:age_output ; # ex:takesOutputs specifies which output of the fno:Function to take (bc 1 function can have multiple outputs)
+  svr:streaming "true"^^xsd:boolean . # using svr:streaming could be a hint for you to know the functions is streaming so you can use `addVirtualRouteStream` instead of `addVirtualRoute`
+
+# ========== Start function ========== #
+fns:age_start a fno:Function ;
+  svr:streamingFunctionType svr:Start; 
+  fno:expects ( ) ; # This function takes no parameters (i.e., dbo:birthdate and dbo:age are hardcoded)
+  fno:returns ( ) .
+  # We could add more metadata such as `isPure = truee` (see https://en.wikipedia.org/wiki/Pure_function), which could be a hint that you can cache the result
+
+
+# Everything below this line follows the FnO spec, see https://fno.io/spec/#ontology-concrete
+fns:age_startMapping a fno:Mapping ;
+  fno:function fns:age_start ;
+  fno:implementation fns:age_startImplementation .
+
+fns:age_startImplementation a fno:Implementation, fnoi:JavaScriptImplementation, svr:internalImplementation ; # using svr:internalImplementation could be a hint for you to use your internally coded function
+  doap:name "Age_Start" .
+
+# ========== Age Process ========== #
+fns:quadParameter rdf:type fno:Parameter ;
+  rdfs:label "quad"@en ;
+  fno:predicate fns:quad ;
+  fno:required "true"^^xsd:boolean .
+ 
+fns:age_process a fno:Function ;
+  svr:streamingFunctionType svr:Process;
+  fno:expects ( fns:quadParameter ) ;
+  fno:returns ( fns:age_output ) . 
+  # We could add more metadata such as `isPure = truee` (see https://en.wikipedia.org/wiki/Pure_function), which could be a hint that you can cache the result
+
+fns:age_output a fno:Output ;
+  fno:predicate fns:age_out .
+
+# Everything below this line follows the FnO spec, see https://fno.io/spec/#ontology-concrete
+fns:age_processMapping a fno:Mapping ;
+  fno:function fns:age_process ;
+  fno:parameterMapping fns:quadParameterMapping;
+  fno:returnMapping fns:age_processReturnMapping;
+  fno:implementation fns:age_processImplementation .
+
+fns:quadParameterMapping rdf:type fno:ParameterMapping, fnom:PositionParameterMapping ;
+  fnom:functionParameter fns:quadParameter ;
+  fno:predicate fns:quad;
+  fnom:implementationParameterPosition "0"^^xsd:integer .
+		
+fns:age_processImplementation a fno:Implementation, fnoi:JavaScriptImplementation, svr:internalImplementation ; # using svr:internalImplementation could be a hint for you to use your internally coded function
+  doap:name "Age_Process" .
+
+fns:age_processReturnMapping  rdf:type fno:ReturnMapping, fnom:DefaultReturnMapping ;
+  fnom:functionOutput fns:age_output .
+  
+# ========== Age End ========== #
+
+fns:age_end a fno:Function ;
+  svr:streamingFunctionType svr:End;
+  fno:expects ( ) ; # This function takes no parameters
+  fno:returns ( fns:age_end_output ) . # This function returns 1 output
+  # We could add more metadata such as `isPure = truee` (see https://en.wikipedia.org/wiki/Pure_function), which could be a hint that you can cache the result
+
+fns:age_end_output a fno:Output ;
+  fno:predicate fns:end_out .
+
+# Everything below this line follows the FnO spec, see https://fno.io/spec/#ontology-concrete
+fns:age_endMapping a fno:Mapping ;
+  fno:function fns:age_end ;
+  fno:returnMapping fns:age_outReturnMapping;
+  fno:implementation fns:age_endImplementation .
+
+fns:age_endImplementation a fno:Implementation, fnoi:JavaScriptImplementation, svr:internalImplementation ; # using svr:internalImplementation could be a hint for you to use your internally coded function
+  doap:name "Age_End" ;
+  rdfs:label "test" .
+
+fns:age_outReturnMapping  rdf:type fno:ReturnMapping, fnom:DefaultReturnMapping ;
+  fnom:functionOutput fns:age_end_output . 
+ 
+ 
+ 
+# this is a test

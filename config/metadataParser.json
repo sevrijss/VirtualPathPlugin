@@ -5,10 +5,13 @@
   ],
   "@graph": [
     {
-      "comment": "URL builder so we can define relative paths",
-      "@id": "urn:virtualStore:default:UrlBuilder",
-      "@type": "UrlBuilder",
-      "url": { "@id": "urn:solid-server:default:variable:baseUrl" }
+      "comment": "Metadata parser to extract function(s) for derived resources",
+      "@id": "urn:virtualStore:default:MetadataParser",
+      "@type": "MetadataParser",
+      "converter": {
+        "@id": "urn:solid-server:default:RepresentationConverter"
+      },
+      "size": 10,
     }
   ]
 }

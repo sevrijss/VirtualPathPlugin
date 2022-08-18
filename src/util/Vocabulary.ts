@@ -23,3 +23,49 @@ export const RS_TDWG = createUriAndTermNamespace("http://rs.tdwg.org/dwc/terms/"
     "decimalLatitude",
     "decimalLongitude"
 );
+
+export const SVR = createUriAndTermNamespace("https://example.com/ns/SolidVirtualResource#",
+    "VirtualSolidResource",
+    "internalImplementation",
+    "streaming",
+    "fromResources",
+    "usesFunction",
+    "takesOutput",
+    "literalImplementation",
+    "streamingFunctionType",
+    "Start",
+    "Process",
+    "End",
+    "StartFunction",
+    "ProcessFunction",
+    "EndFunction",
+);
+
+export const FNO = createUriAndTermNamespace("https://w3id.org/function/ontology#",
+    "Function",
+    "expects",
+    "returns",
+    "Output",
+    "Mapping",
+    "function",
+    "implementation",
+    "Implementation",
+);
+
+export const FNS = createUriAndTermNamespace("https://example.com/functions#",
+    "quad",
+    "Store"
+)
+
+export const XMLSchema = createUriAndTermNamespace("http://www.w3.org/2001/XMLSchema#",
+    "boolean",
+);
+
+export const DOAP = createUriAndTermNamespace("http://usefulinc.com/ns/doap#",
+    "name",
+);
+
+export const FNOI = createUriAndTermNamespace("https://w3id.org/function/vocabulary/implementation#",
+    "JavaScriptImplementation",
+    "SparqlImplementation",
+);

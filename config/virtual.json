@@ -1,6 +1,6 @@
 {
   "@context": [
-    "https://linkedsoftwaredependencies.org/bundles/npm/@solid/community-server/^4.0.0/components/context.jsonld",
+    "https://linkedsoftwaredependencies.org/bundles/npm/@solid/community-server/^5.0.0/components/context.jsonld",
     "https://linkedsoftwaredependencies.org/bundles/npm/solid-virtual-route-community-server/^0.0.0/components/context.jsonld"
   ],
   "@graph": [
@@ -13,6 +13,9 @@
       },
       "urlBuilder": {
         "@id": "urn:virtualStore:default:UrlBuilder"
+      },
+      "metadataParser": {
+        "@id": "urn:virtualStore:default:MetadataParser"
       }
     }
   ]
