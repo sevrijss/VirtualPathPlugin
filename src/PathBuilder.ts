@@ -1,8 +1,6 @@
 import {VirtualStore} from "./util/VirtualStore";
-import {getLoggerFor} from "@solid/community-server";
 import {Quad} from "rdf-js";
 import N3, {DataFactory, NamedNode} from "n3";
-import {Age} from "./example/Age"
 import {BIMERR, DBP, FOAF, RS_TDWG} from "./util/Vocabulary";
 
 const {namedNode, literal, defaultGraph, quad} = DataFactory;
@@ -15,7 +13,6 @@ export class PathBuilder {
 
     public constructor(vStore: VirtualStore) {
         this.virtualStore = vStore;
-        const age = new Age()
         //this.virtualStore.addVirtualRouteStream('/age', ['/card.ttl'], age.start, age.process, age.onClose);
         //this.virtualStore.addVirtualRouteStream('/age3', ['/doesntExist.ttl'], age.start, age.process, age.onClose);
         //this.virtualStore.addVirtualRouteStreamProcessor('/age3', ['/card.ttl'], age);
@@ -30,8 +27,6 @@ export class PathBuilder {
             (q) => q.getQuads(null, null, null, defaultGraph()))
          */
     }
-
-    private readonly logger = getLoggerFor("pathBuilder");
 
     async getWeather(jsonObject: any): Promise<Quad[]> {
         const responseID = namedNode(this.virtualStore.resolve(`weather_${Date.now()}`))
@@ -96,11 +91,17 @@ export class PathBuilder {
             out.push(quad(
                 data.subject,
                 namedNode(DBP.age),
-                literal(Age.yearsPassed(new Date(data.object.value)))
+                literal(this.yearsPassed(new Date(data.object.value)))
             ));
         }
         return out;
     };
+
+    yearsPassed(date: Date) {
+        const now = new Date().getFullYear()
+        const then = date.getFullYear();
+        return now - then;
+    }
 
     private composite = (data: Quad): Quad[] => {
         const out: Quad[] = []
@@ -121,7 +122,7 @@ export class PathBuilder {
             out.push(quad(
                 data.subject,
                 namedNode(DBP.age),
-                literal(Age.yearsPassed(new Date(data.object.value)))
+                literal(this.yearsPassed(new Date(data.object.value)))
             ));
         }
         for (const data of store.match(null, namedNode(FOAF.knows), null)) {

@@ -265,7 +265,6 @@ export class MetadataParser {
                                             const obj = binding.get("o") as Quad_Object;
                                             return quad(subj, pred, obj)
                                         }))
-                                        console.log(data);
                                         return data;
                                     },
                                     // external functions get a higher priority to correct internal implementations if needed
@@ -342,10 +341,8 @@ export class MetadataParser {
                                     throw new InternalServerError("The server encountered an impossible state");
                             }
                         } else {
-                            console.log(`${iri} is not streaming`)
                             f.contenttype = "store";
                             if (hasInternal) {
-                                console.log(`${iri} has internal`)
                                 // if there's an internal implementation, load it
                                 const names = store.getQuads(implementation.object.value, DOAP.name, null, null)
                                 if (names.length > 1) {
@@ -360,13 +357,11 @@ export class MetadataParser {
                                 }
                                 f.content = func as processor;
                             } else {
-                                console.log(`${iri} has no internal`)
                                 f.content = async (arg0: Store) => {
 
                                     const functionResult = await handler.executeFunction(result, {[`${FNS.Store}`]: arg0,});
                                     const outputs = Object.keys(functionResult);
                                     if (outputs.length !== 1) {
-                                        console.log(outputs);
                                         throw new InternalServerError("The function must return 1 and only 1 value of type Quad[]")
                                     }
                                     return functionResult[outputs[0]] as Quad[]

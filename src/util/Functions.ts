@@ -1,7 +1,6 @@
 import {Quad} from "rdf-js";
 import N3, {DataFactory, NamedNode, Store} from "n3";
 import {DBP, FOAF} from "./Vocabulary";
-import {Age} from "../example/Age";
 
 const {namedNode, literal, quad} = DataFactory;
 
@@ -32,7 +31,7 @@ export const Functions: Record<string, Function> = {
             out.push(quad(
                 data.subject,
                 namedNode(DBP.age),
-                literal(Age.yearsPassed(new Date(data.object.value)))
+                literal(yearsPassed(new Date(data.object.value)))
             ));
         }
         for (const data of store.match(null, namedNode(FOAF.knows), null)) {
