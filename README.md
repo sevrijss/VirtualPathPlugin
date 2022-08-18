@@ -87,3 +87,13 @@ fns:age_implementation a fno:Implementation, fnoi:JavaScriptImplementation;
 * [N3](http://rdf.js.org/N3.js/)
 * [Community Solid Server](https://github.com/CommunitySolidServer/CommunitySolidServer.git)
 * [Vocabulary](src/util/Vocabulary.ts)
+
+Instead of 1 function that receives an entire `N3.Store`, you can also process the data in a streaming fashion.
+You can provide 3 `svr:usesFunction IRI`, each of them labeled with `RDF:type svr:StartFunction;`, `RDF:type svr:ProcessFunction;` or `RDF:type svr:EndFunction;`. They will be called in this way:
+1. StartFunction (type `() => {}`)
+2. ProcessFunction (type `(Quad) => Quad[]`)
+3. EndFunction (type `() => Quad[]`)
+
+These functions can also have an internal declaration or an external (literal) one.
+
+_At the time of writing the FnO handler used in this codebase is still incomplete, so it might break when the FnO spec / handler changes_
