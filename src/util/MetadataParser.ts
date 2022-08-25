@@ -258,13 +258,33 @@ export class MetadataParser {
                                     // inject a `modules` argument containing modules for basic quad operations
                                     fn: async (store: Store) => {
                                         const myEngine = new QueryEngine();
-                                        const stream = await myEngine.queryBindings(sparqlString, {sources: [store]});
-                                        const data = await arrayifyStream(stream.map((binding) => {
-                                            const subj = binding.get("s") as Quad_Subject;
-                                            const pred = binding.get("p") as Quad_Predicate;
-                                            const obj = binding.get("o") as Quad_Object;
-                                            return quad(subj, pred, obj)
-                                        }))
+                                        const result = await myEngine.query(sparqlString, {sources: [store]})
+                                        let data: Quad[] = [];
+                                        if (result.resultType === "bindings") {
+                                            const stream = await result.execute();
+                                            data = await arrayifyStream(stream.map((binding) => {
+                                                const subj = binding.get("s") as Quad_Subject;
+                                                const pred = binding.get("p") as Quad_Predicate;
+                                                const obj = binding.get("o") as Quad_Object;
+                                                return quad(subj, pred, obj)
+                                            }))
+                                        } else if (result.resultType === "quads") {
+                                            const quads = await result.execute()
+                                            const temp = await arrayifyStream(quads);
+                                            // filter because comunica gives duplicates?
+                                            temp.forEach(quad => {
+                                                let used = false;
+                                                data.forEach(q => {
+                                                    used = used || (quad.subject.value === q.subject.value
+                                                        && quad.predicate.value === q.predicate.value
+                                                        && quad.object.value === q.object.value
+                                                        && quad.graph.value === q.graph.value)
+                                                })
+                                                if (!used) {
+                                                    data.push(quad);
+                                                }
+                                            })
+                                        }
                                         return data;
                                     },
                                     // external functions get a higher priority to correct internal implementations if needed
